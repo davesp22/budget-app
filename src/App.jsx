@@ -359,6 +359,7 @@ export default function App() {
 
   // Search
   const [searchQuery, setSearchQuery] = useState("");
+  const [catDetail, setCatDetail] = useState(null);
 
   const fileRef = useRef();
 
@@ -399,8 +400,10 @@ export default function App() {
 
   // Annual
   const annualData = Array.from({ length:12 }, (_, i) => {
-    const tx = transactions.filter(t => { const d = new Date(t.date); return d.getMonth()===i && d.getFullYear()===year && !t.isIncome; });
-    return { month: MONTHS_SHORT[i], spent: tx.reduce((s,t) => s+Number(t.amount),0) + totalRecurring };
+    const monthTxs = transactions.filter(t => { const d = new Date(t.date); return d.getMonth()===i && d.getFullYear()===year; });
+    const spent = monthTxs.filter(t => !t.isIncome).reduce((s,t) => s+Number(t.amount),0) + totalRecurring;
+    const earned = monthTxs.filter(t => t.isIncome).reduce((s,t) => s+Number(t.amount),0) + recurringIncome;
+    return { month: MONTHS_SHORT[i], spent, earned };
   });
 
   // Insights
@@ -567,7 +570,7 @@ export default function App() {
             const prev = prevSpentByCat[cat.id] || 0;
             const trend = prev > 0 ? ((spent-prev)/prev*100).toFixed(0) : null;
             return (
-              <div key={cat.id} style={{ background:T.card, border:`1px solid ${over?T.red+"66":T.border}`, borderRadius:14, padding:"13px 14px", marginBottom:8 }}>
+              <div key={cat.id} onClick={() => { setCatDetail(cat.id); setSheet("catDetail"); }} style={{ background:T.card, border:`1px solid ${over?T.red+"66":T.border}`, borderRadius:14, padding:"13px 14px", marginBottom:8, cursor:"pointer" }}>
                 <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
                   <div style={{ display:"flex", alignItems:"center", gap:10 }}>
                     <div style={{ width:38, height:38, borderRadius:11, background:cat.color+"22", display:"flex", alignItems:"center", justifyContent:"center", fontSize:19 }}>{cat.icon}</div>
@@ -636,7 +639,7 @@ export default function App() {
   function AnnualTab() {
     const maxSpent = Math.max(...annualData.map(d => d.spent), 1);
     const totalY = annualData.reduce((s,d) => s+d.spent, 0);
-    const incY = recurringIncome * 12;
+    const realIncY = annualData.reduce((s,d) => s+d.earned, 0);
     return (
       <div>
         <div style={{ fontWeight:800, fontSize:22, color:T.text, marginBottom:4 }}>Année {year}</div>
@@ -647,9 +650,9 @@ export default function App() {
 
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:18 }}>
           {[
-            { l:"Revenus estimés", v:fmt(incY), c:T.green },
+            { l:"Revenus totaux", v:fmt(realIncY), c:T.green },
             { l:"Dépenses totales", v:fmt(totalY), c:T.red },
-            { l:"Économies", v:fmt(incY-totalY), c:incY-totalY>=0?T.green:T.red },
+            { l:"Économies", v:fmt(realIncY-totalY), c:realIncY-totalY>=0?T.green:T.red },
             { l:"Moy. mensuelle", v:fmt(totalY/12), c:T.yellow },
           ].map(({ l,v,c }) => (
             <div key={l} style={{ background:T.card, border:`1px solid ${T.border}`, borderRadius:14, padding:"16px 14px" }}>
@@ -681,12 +684,13 @@ export default function App() {
             {["Mois","Dépenses","Solde"].map(h => <div key={h} style={{ fontSize:11, fontWeight:700, color:T.muted }}>{h}</div>)}
           </div>
           {annualData.map((d, i) => {
-            const saldo = recurringIncome - d.spent;
+            const saldo = d.earned - d.spent;
+            const hasTx = d.spent > 0 || d.earned > 0;
             return (
               <div key={i} onClick={() => { setMonth(i); setTab("home"); }} style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", padding:"12px 14px", borderTop:`1px solid ${T.border}`, cursor:"pointer", background:i===month?T.accent+"12":"transparent" }}>
                 <div style={{ fontWeight:i===month?800:400, color:i===month?T.accent:T.text, fontSize:14 }}>{MONTHS_SHORT[i]}</div>
                 <div style={{ color:T.red, fontWeight:600, fontSize:14 }}>{d.spent>0?fmt(d.spent):"—"}</div>
-                <div style={{ color:saldo>=0?T.green:T.red, fontWeight:700, fontSize:14 }}>{recurringIncome>0?fmt(saldo):"—"}</div>
+                <div style={{ color:hasTx?(saldo>=0?T.green:T.red):T.muted, fontWeight:700, fontSize:14 }}>{hasTx?fmt(Math.abs(saldo)):"—"}</div>
               </div>
             );
           })}
@@ -905,6 +909,22 @@ export default function App() {
     );
   }
 
+  function CatDetailSheet() {
+    const cat = getCat(catDetail);
+    const catTx = expenses.filter(t => t.category === catDetail).sort((a,b) => new Date(b.date)-new Date(a.date));
+    const total = catTx.reduce((s,t) => s+Number(t.amount), 0);
+    return (
+      <Sheet title={`${cat.icon} ${cat.label}`} onClose={() => setSheet(null)}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", background:cat.color+"18", border:`1px solid ${cat.color}33`, borderRadius:12, padding:"12px 16px", marginBottom:16 }}>
+          <div style={{ fontSize:13, color:T.muted, fontWeight:600 }}>Total {MONTHS[month]}</div>
+          <div style={{ fontSize:20, fontWeight:800, color:cat.color }}>{fmt(total)}</div>
+        </div>
+        {catTx.length === 0 && <div style={{ textAlign:"center", color:T.muted, padding:24 }}>Aucune dépense</div>}
+        {catTx.map(t => <TxRow key={t.id} t={t} onDelete={() => { delTx(t.id); }} />)}
+      </Sheet>
+    );
+  }
+
   function HistorySheet() {
     return (
       <Sheet title="Historique complet" onClose={() => setSheet(null)}>
@@ -944,9 +964,10 @@ export default function App() {
   ];
 
   return (
-    <div style={{ background:T.bg, minHeight:"100vh", fontFamily:"'Inter','SF Pro Display',system-ui,sans-serif", color:T.text, maxWidth:430, margin:"0 auto", position:"relative" }}>
+    <div style={{ background:T.bg, minHeight:"100vh", minHeight:"100dvh", fontFamily:"'Inter','SF Pro Display',system-ui,sans-serif", color:T.text, maxWidth:430, margin:"0 auto", position:"relative" }}>
       <style>{`
         * { -webkit-tap-highlight-color: transparent; box-sizing: border-box; }
+        html, body { background: #0A0C12 !important; margin: 0; padding: 0; }
         input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; }
         @keyframes pulse { 0%,100%{opacity:.3;transform:scale(.8)} 50%{opacity:1;transform:scale(1)} }
         ::-webkit-scrollbar { display: none; }
@@ -976,6 +997,7 @@ export default function App() {
       {sheet === "import"  && importLoading && <ImportLoadingSheet />}
       {sheet === "review"  && !importLoading && <ReviewSheet />}
       {sheet === "history" && <HistorySheet />}
+      {sheet === "catDetail" && catDetail && <CatDetailSheet />}
 
       <Toast msg={toast} onDone={() => setToast("")} />
     </div>
