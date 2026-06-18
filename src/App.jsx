@@ -264,6 +264,21 @@ const today = () => new Date().toISOString().slice(0, 10);
 function getCat(id) { return CATEGORIES.find(c => c.id === id) || CATEGORIES[CATEGORIES.length - 1]; }
 
 // ─── UI Components ────────────────────────────────────────────────────────────
+function ConfirmDialog({ msg, onConfirm, onCancel }) {
+  if (!msg) return null;
+  return (
+    <div style={{ position:"fixed", inset:0, background:"#000C", zIndex:600, display:"flex", alignItems:"center", justifyContent:"center", padding:24 }}>
+      <div style={{ background:T.surface, borderRadius:20, padding:"24px 20px", width:"100%", maxWidth:340 }}>
+        <div style={{ fontSize:16, fontWeight:600, color:T.text, marginBottom:20, textAlign:"center" }}>{msg}</div>
+        <div style={{ display:"flex", gap:10 }}>
+          <button onClick={onCancel} style={{ flex:1, background:T.card, border:`1px solid ${T.border}`, borderRadius:12, padding:"13px", color:T.muted, fontWeight:700, fontSize:15, cursor:"pointer" }}>Annuler</button>
+          <button onClick={onConfirm} style={{ flex:1, background:T.red, border:"none", borderRadius:12, padding:"13px", color:"#fff", fontWeight:700, fontSize:15, cursor:"pointer" }}>Supprimer</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function Toast({ msg, onDone }) {
   useEffect(() => { if (msg) { const t = setTimeout(onDone, 2800); return () => clearTimeout(t); } }, [msg]);
   if (!msg) return null;
@@ -275,9 +290,37 @@ function Toast({ msg, onDone }) {
 }
 
 function Sheet({ title, onClose, children }) {
+  const [dragY, setDragY] = useState(0);
+  const [startY, setStartY] = useState(null);
+  const sheetRef = useRef(null);
+
+  function onTouchStart(e) {
+    const sheet = sheetRef.current;
+    if (sheet && sheet.scrollTop === 0) {
+      setStartY(e.touches[0].clientY);
+    }
+  }
+  function onTouchMove(e) {
+    if (startY === null) return;
+    const delta = e.touches[0].clientY - startY;
+    if (delta > 0) setDragY(delta);
+  }
+  function onTouchEnd() {
+    if (dragY > 120) onClose();
+    setDragY(0);
+    setStartY(null);
+  }
+
   return (
     <div style={{ position:"fixed", inset:0, background:"#000B", zIndex:500, display:"flex", alignItems:"flex-end" }} onClick={onClose}>
-      <div onClick={e => e.stopPropagation()} style={{ background:T.surface, borderRadius:"22px 22px 0 0", width:"100%", maxHeight:"92vh", overflowY:"auto", padding:"0 20px 44px" }}>
+      <div
+        ref={sheetRef}
+        onClick={e => e.stopPropagation()}
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
+        style={{ background:T.surface, borderRadius:"22px 22px 0 0", width:"100%", maxHeight:"92vh", overflowY:"auto", padding:"0 20px 44px", transform:`translateY(${dragY}px)`, transition:dragY===0?"transform .3s ease":"none" }}
+      >
         <div style={{ position:"sticky", top:0, background:T.surface, paddingTop:12, paddingBottom:12, zIndex:1 }}>
           <div style={{ width:36, height:4, background:T.dim, borderRadius:2, margin:"0 auto 14px" }} />
           <div style={{ fontWeight:800, fontSize:18, color:T.text }}>{title}</div>
@@ -360,8 +403,10 @@ export default function App() {
   // Search
   const [searchQuery, setSearchQuery] = useState("");
   const [catDetail, setCatDetail] = useState(null);
+  const [confirmDel, setConfirmDel] = useState(null); // { id, label }
 
   const fileRef = useRef();
+  const swipeStartX = useRef(null);
 
   // Persist
   useEffect(() => save(SK.tx, transactions), [transactions]);
@@ -423,7 +468,8 @@ export default function App() {
 
   // ── Actions ───────────────────────────────────────────────────────────────
   function addTx(data) { setTx(p => [{ id: Date.now() + Math.random(), ...data }, ...p]); setToast("✅ Ajouté"); }
-  function delTx(id) { setTx(p => p.filter(x => x.id !== id)); setToast("🗑 Supprimé"); }
+  function delTx(id) { setTx(p => p.filter(x => x.id !== id)); setToast("🗑 Supprimé"); setConfirmDel(null); }
+  function askDelTx(t) { setConfirmDel({ id: t.id, label: t.description }); }
   function addIncome(data) { setIncomes(p => [...p, { id: Date.now(), ...data }]); setToast("✅ Revenu ajouté"); }
   function delIncome(id) { setIncomes(p => p.filter(x => x.id !== id)); setToast("🗑 Supprimé"); }
   function addRec(data) { setRec(p => [...p, { id: Date.now(), ...data }]); setToast("✅ Récurrente ajoutée"); }
@@ -501,8 +547,14 @@ export default function App() {
           <button onClick={nextMonth} style={{ background:"none", border:"none", color:T.muted, fontSize:24, cursor:"pointer", padding:"4px 8px" }}>›</button>
         </div>
 
-        {/* Balance hero */}
-        <div style={{ background:`linear-gradient(135deg, ${T.accent}20, ${balance>=0?T.green:T.red}15)`, border:`1px solid ${balance>=0?T.accent:T.red}33`, borderRadius:22, padding:"24px 20px 20px", marginBottom:14, position:"relative", overflow:"hidden" }}>
+        {/* Balance hero - swipe left/right to change month */}
+        <div
+          onTouchStart={e => { swipeStartX.current = e.touches[0].clientX; }}
+          onTouchEnd={e => {
+            const diff = swipeStartX.current - e.changedTouches[0].clientX;
+            if (Math.abs(diff) > 60) { if (diff > 0) nextMonth(); else prevMonth(); }
+          }}
+          style={{ background:`linear-gradient(135deg, ${T.accent}20, ${balance>=0?T.green:T.red}15)`, border:`1px solid ${balance>=0?T.accent:T.red}33`, borderRadius:22, padding:"24px 20px 20px", marginBottom:14, position:"relative", overflow:"hidden", touchAction:"pan-y" }}>
           <div style={{ fontSize:11, color:T.muted, fontWeight:700, letterSpacing:1, marginBottom:6 }}>SOLDE DU MOIS</div>
           <div style={{ fontSize:42, fontWeight:900, color:balance>=0?T.green:T.red, letterSpacing:-2, lineHeight:1 }}>
             {balance>=0?"+":""}{fmt(balance)}
@@ -513,8 +565,8 @@ export default function App() {
             </div>
           )}
           <div style={{ display:"flex", gap:20, marginTop:16, paddingTop:16, borderTop:`1px solid ${T.border}` }}>
-            <div>
-              <div style={{ fontSize:11, color:T.muted, fontWeight:600 }}>REVENUS</div>
+            <div onClick={() => setSheet("incomeDetail")} style={{ cursor:"pointer" }}>
+              <div style={{ fontSize:11, color:T.muted, fontWeight:600 }}>REVENUS ›</div>
               <div style={{ fontSize:20, fontWeight:800, color:T.green }}>{fmt(totalIncome)}</div>
             </div>
             <div>
@@ -909,6 +961,50 @@ export default function App() {
     );
   }
 
+  function IncomeDetailSheet() {
+    const incTx = monthTx.filter(t => t.isIncome).sort((a,b) => new Date(b.date)-new Date(a.date));
+    const totalTxIncome = incTx.reduce((s,t) => s+Number(t.amount), 0);
+    return (
+      <Sheet title={`💰 Revenus — ${MONTHS[month]}`} onClose={() => setSheet(null)}>
+        {recurringIncome > 0 && (
+          <div style={{ marginBottom:14 }}>
+            <div style={{ fontSize:11, color:T.muted, fontWeight:700, letterSpacing:.6, marginBottom:8 }}>REVENUS FIXES CONFIGURÉS</div>
+            {incomes.map(inc => (
+              <div key={inc.id} style={{ background:T.card, border:`1px solid ${T.border}`, borderRadius:12, padding:"12px 14px", marginBottom:7, display:"flex", justifyContent:"space-between" }}>
+                <div>
+                  <div style={{ fontWeight:600, fontSize:14, color:T.text }}>{inc.label}</div>
+                  <div style={{ fontSize:11, color:T.muted }}>Versé le {inc.day}</div>
+                </div>
+                <span style={{ fontWeight:800, color:T.green }}>{fmt(inc.amount)}</span>
+              </div>
+            ))}
+          </div>
+        )}
+        {incTx.length > 0 && (
+          <div>
+            <div style={{ fontSize:11, color:T.muted, fontWeight:700, letterSpacing:.6, marginBottom:8 }}>ENTRÉES IMPORTÉES</div>
+            {incTx.map(t => (
+              <div key={t.id} style={{ background:T.card, border:`1px solid ${T.green}33`, borderRadius:12, padding:"12px 14px", marginBottom:7, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                <div style={{ minWidth:0, flex:1, marginRight:10 }}>
+                  <div style={{ fontWeight:600, fontSize:13, color:T.text, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{t.description}</div>
+                  <div style={{ fontSize:11, color:T.muted }}>{t.date}</div>
+                </div>
+                <span style={{ fontWeight:800, color:T.green, flexShrink:0 }}>+{fmt(t.amount)}</span>
+              </div>
+            ))}
+          </div>
+        )}
+        {incTx.length === 0 && recurringIncome === 0 && (
+          <div style={{ textAlign:"center", color:T.muted, padding:24 }}>Aucun revenu ce mois</div>
+        )}
+        <div style={{ background:T.green+"15", border:`1px solid ${T.green}33`, borderRadius:12, padding:"12px 16px", marginTop:16, display:"flex", justifyContent:"space-between" }}>
+          <span style={{ color:T.muted, fontWeight:600 }}>Total</span>
+          <span style={{ fontWeight:800, color:T.green }}>{fmt(totalIncome)}</span>
+        </div>
+      </Sheet>
+    );
+  }
+
   function CatDetailSheet() {
     const cat = getCat(catDetail);
     const catTx = expenses.filter(t => t.category === catDetail).sort((a,b) => new Date(b.date)-new Date(a.date));
@@ -998,6 +1094,8 @@ export default function App() {
       {sheet === "review"  && !importLoading && <ReviewSheet />}
       {sheet === "history" && <HistorySheet />}
       {sheet === "catDetail" && catDetail && <CatDetailSheet />}
+      {sheet === "incomeDetail" && <IncomeDetailSheet />}
+      {confirmDel && <ConfirmDialog msg={`Supprimer "${confirmDel.label}" ?`} onConfirm={() => delTx(confirmDel.id)} onCancel={() => setConfirmDel(null)} />}
 
       <Toast msg={toast} onDone={() => setToast("")} />
     </div>
