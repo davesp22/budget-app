@@ -190,7 +190,7 @@ function smartCat(desc, act){
   if(TWINT_PERSONS.some(n=>d.includes(n))) return "twint";
 
   // Mots-clés étendus (cherche dans toutes les catégories)
-  for(const cat of CATS){
+  for(const cat of BASE_CATS){
     if(cat.id==="twint") continue;
     if(cat.kw.some(k => d.includes(k))) return cat.id;
   }
@@ -452,7 +452,7 @@ function Sheet({ title, subtitle, onClose, children }) {
 function Field({ label, children }){ const T=useT(); return <div style={{ marginBottom:16 }}>{label&&<div style={{ fontSize:12,color:T.inkDim,fontWeight:700,marginBottom:8,letterSpacing:.8,textTransform:"uppercase" }}>{label}</div>}{children}</div>; }
 function TInput(props){ const T=useT(); return <input {...props} style={{ width:"100%",background:T.cardHi,border:`1px solid ${T.stroke}`,borderRadius:15,padding:"15px 16px",color:T.ink,fontSize:16,outline:"none",boxSizing:"border-box",fontFamily:"inherit",...props.style }} />; }
 function TBtn({ children, variant="primary", full, onClick }){ const T=useT(); const bg=variant==="primary"?`linear-gradient(135deg,${T.indigo},${T.violet})`:variant==="up"?`linear-gradient(135deg,${T.up},#5AF0B8)`:variant==="down"?`linear-gradient(135deg,${T.down},#FF8AA0)`:T.cardHi; const col=variant==="ghost"?T.inkSub:"#fff"; return <button onClick={onClick} style={{ background:bg,color:col,border:variant==="ghost"?`1px solid ${T.stroke}`:"none",borderRadius:17,padding:"16px 24px",fontWeight:700,fontSize:16,cursor:"pointer",width:full?"100%":"auto",fontFamily:"inherit",boxShadow:variant!=="ghost"?`0 6px 22px ${T.glow}`:"none",marginTop:4 }}>{children}</button>; }
-function CatPicker({ value, onChange }){ const T=useT(); return <div style={{ display:"flex",flexWrap:"wrap",gap:8 }}>{allCats.map(c=><button key={c.id} onClick={()=>onChange(c.id)} style={{ background:value===c.id?`linear-gradient(135deg,${c.color}33,${c.color}15)`:T.cardHi,border:`1px solid ${value===c.id?c.color:T.stroke}`,borderRadius:20,padding:"8px 14px",color:value===c.id?c.color:T.inkSub,fontSize:13,cursor:"pointer",fontWeight:value===c.id?700:400,transition:"all .15s" }}>{c.icon} {c.label}</button>)}</div>; }
+function CatPicker({ value, onChange, cats=BASE_CATS }){ const T=useT(); return <div style={{ display:"flex",flexWrap:"wrap",gap:8 }}>{cats.map(c=><button key={c.id} onClick={()=>onChange(c.id)} style={{ background:value===c.id?`linear-gradient(135deg,${c.color}33,${c.color}15)`:T.cardHi,border:`1px solid ${value===c.id?c.color:T.stroke}`,borderRadius:20,padding:"8px 14px",color:value===c.id?c.color:T.inkSub,fontSize:13,cursor:"pointer",fontWeight:value===c.id?700:400,transition:"all .15s" }}>{c.icon} {c.label}</button>)}</div>; }
 function TxRow({ t, onDel, onEdit }){ const T=useT(); const c=catById(t.category); return (
   <div style={{ display:"flex",alignItems:"center",gap:12,padding:"12px 0",borderBottom:`1px solid ${T.strokeSoft}` }}>
     <div onClick={onEdit} style={{ cursor:onEdit?"pointer":"default" }}>
@@ -487,7 +487,6 @@ export default function App() {
   const [txs,setTxs]=useState(()=>load(SK.tx,[]));
   const [incomes,setIncomes]=useState(()=>load(SK.inc,[]));
   const [recurring,setRecurring]=useState(()=>load(SK.rec,[]));
-  const [budgets,setBudgets]=useState(()=>load(SK.bud,{}));
   const [sheet,setSheet]=useState(null);
   const [toast,setToast]=useState("");
   const [confirm,setConfirm]=useState(null);
@@ -505,7 +504,6 @@ export default function App() {
   useEffect(()=>save(SK.tx,txs),[txs]);
   useEffect(()=>save(SK.inc,incomes),[incomes]);
   useEffect(()=>save(SK.rec,recurring),[recurring]);
-  useEffect(()=>save(SK.bud,budgets),[budgets]);
   useEffect(()=>save(SK.theme,themeKey),[themeKey]);
   useEffect(()=>save(SK.cats,customCats),[customCats]);
   useEffect(()=>save(SK.rules,learnedRules),[learnedRules]);
@@ -548,12 +546,12 @@ export default function App() {
 
   const insights=useMemo(()=>{
     const r=[];
-    for(const c of CATS){ const cur=C.byCat[c.id]||0,pr=C.pByCat[c.id]||0;
+    const cats=[...BASE_CATS.filter(x=>x.id!=="autre"), ...customCats, BASE_CATS[BASE_CATS.length-1]];
+    for(const c of cats){ const cur=C.byCat[c.id]||0,pr=C.pByCat[c.id]||0;
       if(cur>0&&pr>0){ const d=(cur-pr)/pr*100; if(d>35)r.push({m:`+${d.toFixed(0)}% ${c.label}`,i:c.icon,col:T.gold}); if(d<-30)r.push({m:`–${Math.abs(d).toFixed(0)}% ${c.label}`,i:c.icon,col:T.up}); }
-      const b=+budgets[c.id]||0; if(b>0&&cur>b)r.push({m:`Budget ${c.label} dépassé`,i:c.icon,col:T.down});
     }
     return r;
-  },[C,budgets,T]);
+  },[C,customCats,T]);
 
   // ── Actions ──────────────────────────────────────────────────────────────
   const addTx=d=>{setTxs(p=>[{id:Date.now()+Math.random(),...d},...p]);setToast("Ajouté");};
@@ -995,7 +993,7 @@ export default function App() {
         </div>
         <Field label="Description"><TInput placeholder="Ex: Migros, Salaire…" value={f.description} onChange={e=>setF(p=>({...p,description:e.target.value}))} /></Field>
         <Field label="Montant (CHF)"><TInput type="number" placeholder="0.00" value={f.amount} onChange={e=>setF(p=>({...p,amount:e.target.value}))} /></Field>
-        {!f.isIncome&&<Field label="Catégorie"><CatPicker value={f.category} onChange={v=>setF(p=>({...p,category:v}))} /></Field>}
+        {!f.isIncome&&<Field label="Catégorie"><CatPicker value={f.category} onChange={v=>setF(p=>({...p,category:v}))} cats={allCats} /></Field>}
         <Field label="Date"><TInput type="date" value={f.date} onChange={e=>setF(p=>({...p,date:e.target.value}))} /></Field>
         <TBtn full variant={f.isIncome?"up":"primary"} onClick={()=>{if(!f.description||!f.amount)return;addTx(f);setSheet(null);}}>Ajouter</TBtn>
       </Sheet>
@@ -1018,7 +1016,7 @@ export default function App() {
       <Sheet title="Dépense fixe" subtitle="Loyer, abonnements…" onClose={()=>setSheet(null)}>
         <Field label="Label"><TInput placeholder="Ex: Loyer, Spotify…" value={f.label} onChange={e=>setF(p=>({...p,label:e.target.value}))} /></Field>
         <Field label="Montant (CHF)"><TInput type="number" value={f.amount} onChange={e=>setF(p=>({...p,amount:e.target.value}))} /></Field>
-        <Field label="Catégorie"><CatPicker value={f.category} onChange={v=>setF(p=>({...p,category:v}))} /></Field>
+        <Field label="Catégorie"><CatPicker value={f.category} onChange={v=>setF(p=>({...p,category:v}))} cats={allCats} /></Field>
         <Field label="Jour de prélèvement"><TInput type="number" min={1} max={31} value={f.day} onChange={e=>setF(p=>({...p,day:e.target.value}))} /></Field>
         <TBtn full variant="down" onClick={()=>{if(!f.label||!f.amount)return;addRec(f);setSheet(null);}}>Ajouter</TBtn>
       </Sheet>
@@ -1125,7 +1123,7 @@ export default function App() {
           <TInput value={desc} onChange={e=>setDesc(e.target.value)} placeholder="Nom du marchand" />
         </Field>
         <Field label="Catégorie">
-          <CatPicker value={cat} onChange={setCat} />
+          <CatPicker value={cat} onChange={setCat} cats={allCats} />
         </Field>
         <TBtn full onClick={()=>{ updateTx(editTx.id,{description:desc,category:cat}); setEditTx(null); }} style={{marginBottom:12}}>
           Enregistrer
