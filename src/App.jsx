@@ -73,7 +73,7 @@ const DAYS = ["L","M","M","J","V","S","D"];
 //  CATEGORIES
 // ════════════════════════════════════════════════════════════════════════════
 // Noms propres à ignorer à l'import (virements internes)
-const SELF_NAMES = ["esposito davide","davide esposito","esposito, davide"];
+const SELF_NAMES = ["esposito davide","davide esposito","esposito, davide","esposito,davide","neon switzerland"];
 
 // TWINT personnes connues — sortantes → catégorie spécifique
 const TWINT_OUT_MAP = {
@@ -88,7 +88,7 @@ const TWINT_OUT_MAP = {
 };
 
 // Noms de personnes physiques → catégorie twint (virements entre amis/famille)
-const TWINT_PERSONS = ["marshall","dylan","thierry","arbian","maman","papa","jager","mettraux","yerly","jorand","beaud","tiphaine","samuel","consiglia","vincent","kylian","baptiste","choue"];
+const TWINT_PERSONS = ["marshall","dylan","thierry","arbian","maman","papa","jager","mettraux","yerly","jorand","beaud","tiphaine","samuel","consiglia","vincent","kylian","baptiste","choue","lara","tatiana","francisco","gael","iman","perritaz"];
 
 // TWINT personnes connues — entrantes → revenus
 const TWINT_IN_KNOWN = ["beaud tiphaine","mettraux vincent","yerly simon","jager kylian","jorand baptiste","esposito samuel","esposito-mezza consiglia"];
@@ -102,8 +102,9 @@ const CATS = [
         "kebab","pizzeria","pizza","sushi","restaurant","bistro","brasserie","trattoria","grotto",
         "café","cafe","bar ","food","take away","takeaway","tacos","tao lounge","lounge bar","tao ",
         "sumup **star","star sarl","sumup **la","sumup **le","sumup **au","sumup **chez",
+        "popeye","popeyes","f304","mac42","mol*brese","brese gmbh","molbrese",
         "padella","pasta","noodle","ramen","poke","wok","grill","snack","sandwich","döner",
-        "crêpe","crepe","crep","waffle","bubble tea","tea room","tearoom"] },
+        "crêpe","crepe","crep","waffle","bubble tea","tea room","tearoom","five guys","holy cow"] },
   { id:"transport",    label:"Transport",    icon:"🚗", color:"#4FD8E8",
     kw:["sbb","cff","tpf","tpl","tl","bls","flixbus","bus","train","taxi","uber ","parking",
         "tamoil","jubin","esso","shell","bp ","agrola","socar","coop pronto","migrol",
@@ -126,10 +127,12 @@ const CATS = [
   { id:"logement",     label:"Logement",     icon:"🏠", color:"#5CC8FF",
     kw:["loyer","conforama","ikea","jumbo","obi","bricorama","luminaire",
         "électricité","chauffage","eau ","gaz ","internet","swisscom","salt ","sunrise","upc",
-        "office de la circulation","leroy merlin","castorama"] },
+        "office de la circulation","leroy merlin","castorama","bauhaus","hornbach","do it","migros do","brico"] },
   { id:"tech",         label:"Tech",         icon:"💻", color:"#6E5DF0",
     kw:["digitec","galaxus","aliexpress","amazon","mediamarkt","media markt",
         "microspot","interdiscount","brack","apple store","sags","fnac","ldlc","materiel.net","back market"] },
+  { id:"taxes",        label:"Impôts/Taxes",  icon:"🏛️", color:"#94A3B8",
+    kw:["etat de neuchatel","etat de fribourg","etat de vaud","etat de geneve","administration fiscale","impots","impôts","service des contributions","afc ","oci ","caisse cantonale"] },
   { id:"twint",        label:"TWINT",        icon:"📲", color:"#FF8A3D",
     kw:[] },
   { id:"autre",        label:"Autre",        icon:"📦", color:"#8E8EA8",
@@ -238,8 +241,18 @@ CATÉGORIES DISPONIBLES :
 
 RÈGLES SPÉCIALES pour cet utilisateur :
 - "Oberson Guillaume" ou "OBERSON" = loisirs (abonnement Spotify famille)
-- "CHOUE" via ordre permanent IBAN (~705 CHF) = logement (loyer)
-- "CHOUE" via TWINT (autres montants) = twint (virement à sa copine)
+- "CHOUE" = toujours twint (virement à sa copine Tiphaine)
+- Noms de personnes seuls (GAEL, LARA, TATIANA, FRANCISCO, MARSHALL, MAMAN etc.) = twint
+- "Too Good To Go" = alimentation
+- "Popeyes" = restaurant (fast-food)
+- "F304" = restaurant (lieu à Granges-Paccot CH)
+- "Mac42" = restaurant
+- "Bauhaus" = logement (bricolage)
+- "DEUBA", "Deuba GmbH" = loisirs (marketplace en ligne)
+- "GOODVIBE" = loisirs
+- "Etat de Neuchâtel/Fribourg/Vaud" ou montants ~2400 CHF à un canton = taxes
+- "Mol*Brese" = restaurant (brasserie)
+- Davide Esposito / Esposito Davide = virement interne, ignorer
 - "Jubin" = transport (station-essence)
 - "SumUp **[nom]" = restaurant si le nom semble être un bar/café/resto, sinon autre
 - Noms de personnes en MAJUSCULES (MARSHALL, MAMAN, DYLAN, etc.) = twint
