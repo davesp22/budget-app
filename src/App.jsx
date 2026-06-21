@@ -185,13 +185,14 @@ function smartCat(desc, act){
 }
 
 function parseCSV(text){
-  const lines=text.replace(/^\uFEFF/,"").trim().split(/\r?\n/);
+  const clean=text.replace(/^\uFEFF/,"").replace(/^\xEF\xBB\xBF/,"");
+  const lines=clean.trim().split(/\r?\n/);
   if(lines.length<2)return null;
   const h=lines[0].toLowerCase();
   // Yuh: has ACTIVITY TYPE, DEBIT, CREDIT columns
-  if(h.includes("activity type")||h.includes("activity name"))return parseNeonReal(lines);
+  if(h.includes("activity type")||h.includes("activity name"))return parseYuhReal(lines);
   // Neon: has original amount, exchange rate columns
-  if(h.includes("original amount")||h.includes("exchange rate"))return parseYuhReal(lines);
+  if(h.includes("original amount")||h.includes("exchange rate"))return parseNeonReal(lines);
   return parseGeneric(lines);
 }
 function parseYuhReal(lines){
