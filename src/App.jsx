@@ -87,7 +87,7 @@ const TWINT_OUT_MAP = {
 };
 
 // Noms de personnes physiques → catégorie twint (virements entre amis/famille)
-const TWINT_PERSONS = ["marshall","dylan","thierry","arbian","maman","papa","jager","mettraux","yerly","jorand","beaud","tiphaine","samuel","consiglia","vincent","kylian","baptiste","choue","lara","tatiana","francisco","gael","iman","perritaz"];
+const TWINT_PERSONS = ["marshall","dylan","thierry","arbian","maman","papa","jager","mettraux","yerly","jorand","beaud","tiphaine","samuel","consiglia","vincent","kylian","baptiste","choue","lara","tatiana","francisco","gael","iman","perritaz","bro","burri","clement","damien","raphael","romain","pierre","marc","thomas","nicolas","simon","julien","antoine","maxime","steven","kevin","sarah","marie","lea","emma","sofia","lisa","anouk","manon"];
 
 // TWINT personnes connues — entrantes → revenus
 const TWINT_IN_KNOWN = ["beaud tiphaine","mettraux vincent","yerly simon","jager kylian","jorand baptiste","esposito samuel","esposito-mezza consiglia"];
@@ -102,8 +102,9 @@ const CATS = [
         "café","cafe","bar ","food","take away","takeaway","tacos","tao lounge","lounge bar","tao ",
         "sumup **star","star sarl","sumup **la","sumup **le","sumup **au","sumup **chez",
         "popeye","popeyes","f304","mac42","mol*brese","brese gmbh","molbrese",
+        "holy cow","holycow","happy bowl","planet bowl","eleventh floor","ls eleventh","ls holy","ls bro",
         "padella","pasta","noodle","ramen","poke","wok","grill","snack","sandwich","döner",
-        "crêpe","crepe","crep","waffle","bubble tea","tea room","tearoom","five guys","holy cow"] },
+        "crêpe","crepe","crep","waffle","bubble tea","tea room","tearoom","five guys","burgeriste"] },
   { id:"transport",    label:"Transport",    icon:"🚗", color:"#4FD8E8",
     kw:["sbb","cff","tpf","tpl","tl","bls","flixbus","bus","train","taxi","uber ","parking",
         "tamoil","jubin","esso","shell","bp ","agrola","socar","coop pronto","migrol",
@@ -126,7 +127,8 @@ const CATS = [
   { id:"logement",     label:"Logement",     icon:"🏠", color:"#5CC8FF",
     kw:["loyer","conforama","ikea","jumbo","obi","bricorama","luminaire",
         "électricité","chauffage","eau ","gaz ","internet","swisscom","salt ","sunrise","upc",
-        "office de la circulation","leroy merlin","castorama","bauhaus","hornbach","do it","migros do","brico"] },
+        "office de la circulation","leroy merlin","castorama","bauhaus","hornbach","do it","migros do","brico",
+        "action ","action.","maxi bazar","maxibazar","gifi","g-fi","netto","home","hema","kitchenette"] },
   { id:"tech",         label:"Tech",         icon:"💻", color:"#6E5DF0",
     kw:["digitec","galaxus","aliexpress","amazon","mediamarkt","media markt",
         "microspot","interdiscount","brack","apple store","sags","fnac","ldlc","materiel.net","back market"] },
@@ -220,72 +222,55 @@ function parseGeneric(lines){
 }
 
 async function aiCategorize(txs){
-  const toC=txs.filter(t=>!t.isIncome).slice(0,50);
-  if(!toC.length)return{};
+  // Only send transactions that local rules couldn't classify (still "autre")
+  const toC = txs.filter(t => !t.isIncome && t.category === "autre");
+  if(!toC.length) return {};
 
-  const prompt=`Tu es un assistant expert en finances personnelles pour un utilisateur en Suisse romande (Fribourg).
-Tu dois classifier chaque transaction bancaire dans UNE seule catégorie.
+  const BATCH = 60;
+  const allMap = {};
 
-CATÉGORIES DISPONIBLES :
-- alimentation : supermarchés, épiceries, boulangeries, fromageries, producteurs locaux (Migros, Coop, Aldi, Lidl, Denner, Laiterie, Pascal Rossier…)
-- restaurant : restaurants, cafés, bars, fast-food, livraison repas, food trucks, snacks (McDonald's, Starbucks, Uber Eats, Tao Lounge Bar, Imprévu Café, Hungry Bear, SumUp **[nom de bar/resto]…)
-- transport : trains, bus, taxis, essence, parking, péages, livraisons colis (SBB/CFF, Tamoil, DHL, La Poste, Uber [trajet]…)
-- loisirs : streaming, jeux vidéo, sport, cinéma, concerts, hôtels, voyages, abonnements numériques (Netflix, Spotify, Steam, Claude/Anthropic, Adobe, GitHub, Laser Tag…)
-- sante : pharmacies, médecins, dentistes, assurances maladie, optique (Pharmacie, Concordia, CSS, Helsana…)
-- vetements : habits, chaussures, accessoires mode (Zara, H&M, Zalando, BestSecret, HETM…)
-- logement : loyer, meubles, bricolage, électroménager, opérateurs internet (IKEA, Conforama, Swisscom, Salt, Choue/loyer…)
-- tech : électronique, informatique, téléphones (Digitec, Galaxus, AliExpress, Amazon, MediaMarkt…)
-- twint : virements à des personnes physiques (prénoms, noms propres de personnes, ex: MARSHALL, MAMAN, DYLAN, THIERRY, ARBIAN…)
-- autre : tout ce qui ne rentre dans aucune catégorie ci-dessus
+  for(let b = 0; b < toC.length; b += BATCH){
+    const batch = toC.slice(b, b + BATCH);
+    const lines = batch.map((t,i) => i+"|"+t.description+"|CHF "+t.amount).join("\n");
 
-RÈGLES SPÉCIALES pour cet utilisateur :
-- "Oberson Guillaume" ou "OBERSON" = loisirs (abonnement Spotify famille)
-- "CHOUE" = toujours twint (virement à sa copine Tiphaine)
-- Noms de personnes seuls (GAEL, LARA, TATIANA, FRANCISCO, MARSHALL, MAMAN etc.) = twint
-- "Too Good To Go" = alimentation
-- "Popeyes" = restaurant (fast-food)
-- "F304" = restaurant (lieu à Granges-Paccot CH)
-- "Mac42" = restaurant
-- "Bauhaus" = logement (bricolage)
-- "DEUBA", "Deuba GmbH" = loisirs (marketplace en ligne)
-- "GOODVIBE" = loisirs
-- "Etat de Neuchâtel/Fribourg/Vaud" ou montants ~2400 CHF à un canton = taxes
-- "Mol*Brese" = restaurant (brasserie)
-- Davide Esposito / Esposito Davide = virement interne, ignorer
-- "Jubin" = transport (station-essence)
-- "SumUp **[nom]" = restaurant si le nom semble être un bar/café/resto, sinon autre
-- Noms de personnes en MAJUSCULES (MARSHALL, MAMAN, DYLAN, etc.) = twint
-- "Transfert de HouseTrap" ou "HouseTrap Group SA" = revenu (salaire), ignorer pour les dépenses
-- "neon Switzerland AG" = frais bancaires internes, ignorer
-- Prénom seul ou nom de famille seul = probablement twint
+    const prompt = "Tu es un expert en classification de transactions bancaires pour un utilisateur en Suisse romande.\n\n"+
+"RAISONNE comme un humain : si tu vois un nom de restaurant, c'est restaurant. Utilise ton bon sens sur les noms inconnus.\n\n"+
+"CATÉGORIES :\n"+
+"- alimentation : supermarchés, épiceries, boulangeries, kiosques, Too Good To Go...\n"+
+"- restaurant : restaurants, cafés, bars, fast-food, livraison, bowls, burgers...\n"+
+"- transport : trains, bus, taxi, essence, parking, colis DHL/PostCH...\n"+
+"- loisirs : streaming, sport, cinéma, hôtels, voyages, apps, abonnements numériques...\n"+
+"- sante : médecins, pharmacies, assurances, spa, bien-être, optique...\n"+
+"- vetements : habits, chaussures, mode, accessoires...\n"+
+"- logement : loyer, ameublement, bricolage, telecom, magasins maison (Action, GiFi, Maxi Bazar, Bauhaus...)\n"+
+"- tech : électronique, informatique, téléphones (Lenovo, Foletti, Apple produits...)\n"+
+"- twint : virement à une personne physique (prénom/nom seul: BRO, LARA, GAEL, MAMAN...)\n"+
+"- taxes : impôts, amendes, frais cantonaux (État de Neuchâtel, État de Fribourg...)\n"+
+"- autre : vraiment inclassable\n\n"+
+"EXEMPLES:\n"+
+"Happy Bowl → restaurant | Planet Bowl → restaurant | LS Eleventh Floor → restaurant\n"+
+"LS HolyCow → restaurant | Lenovo → tech | FOLETTICOMP → tech | Foletti → tech\n"+
+"Action → logement | Maxi Bazar → logement | GiFi → logement | K Kiosk → alimentation\n"+
+"Polarsteps → loisirs | ATELIERAIKOO → loisirs | Bain-Bleusa → sante\n"+
+"BRO → twint | BURRI CHRISTOPHE → twint | Apple (seul) → loisirs\n\n"+
+"TRANSACTIONS (index|nom|montant):\n"+lines+"\n\n"+
+"JSON uniquement: [{\"index\":0,\"category\":\"restaurant\"}]";
 
-TRANSACTIONS À CLASSIFIER (format: index|description|montant):
-${toC.map((t,i)=>`${i}|${t.description}|CHF ${t.amount}`).join("\n")}
-
-Réponds UNIQUEMENT avec un tableau JSON valide, sans texte avant ou après :
-[{"index":0,"category":"alimentation"},{"index":1,"category":"restaurant"}]`;
-
-  try{
-    const res=await fetch("https://api.anthropic.com/v1/messages",{
-      method:"POST",
-      headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({
-        model:"claude-sonnet-4-6",
-        max_tokens:2000,
-        messages:[{role:"user",content:prompt}]
-      })
-    });
-    const data=await res.json();
-    const txt=data.content?.[0]?.text||"[]";
-    const parsed=JSON.parse(txt.replace(/```json|```/g,"").trim());
-    const map={};
-    for(const r of parsed){ const t=toC[r.index]; if(t)map[t.description+"|"+t.amount]=r.category; }
-    return map;
-  }catch(e){
-    console.error("AI categorize error:",e);
-    return{};
+    try{
+      const res = await fetch("https://api.anthropic.com/v1/messages",{
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({model:"claude-sonnet-4-6",max_tokens:2000,messages:[{role:"user",content:prompt}]})
+      });
+      const data = await res.json();
+      const txt = data.content?.[0]?.text||"[]";
+      const parsed = JSON.parse(txt.replace(/```json|```/g,"").trim());
+      for(const r of parsed){ const t=batch[r.index]; if(t) allMap[t.description+"|"+t.amount]=r.category; }
+    }catch(e){ console.error("AI batch error:",e); }
   }
+  return allMap;
 }
+
 
 // ════════════════════════════════════════════════════════════════════════════
 //  STORAGE & FORMAT
@@ -458,15 +443,18 @@ function Field({ label, children }){ const T=useT(); return <div style={{ margin
 function TInput(props){ const T=useT(); return <input {...props} style={{ width:"100%",background:T.cardHi,border:`1px solid ${T.stroke}`,borderRadius:15,padding:"15px 16px",color:T.ink,fontSize:16,outline:"none",boxSizing:"border-box",fontFamily:"inherit",...props.style }} />; }
 function TBtn({ children, variant="primary", full, onClick }){ const T=useT(); const bg=variant==="primary"?`linear-gradient(135deg,${T.indigo},${T.violet})`:variant==="up"?`linear-gradient(135deg,${T.up},#5AF0B8)`:variant==="down"?`linear-gradient(135deg,${T.down},#FF8AA0)`:T.cardHi; const col=variant==="ghost"?T.inkSub:"#fff"; return <button onClick={onClick} style={{ background:bg,color:col,border:variant==="ghost"?`1px solid ${T.stroke}`:"none",borderRadius:17,padding:"16px 24px",fontWeight:700,fontSize:16,cursor:"pointer",width:full?"100%":"auto",fontFamily:"inherit",boxShadow:variant!=="ghost"?`0 6px 22px ${T.glow}`:"none",marginTop:4 }}>{children}</button>; }
 function CatPicker({ value, onChange }){ const T=useT(); return <div style={{ display:"flex",flexWrap:"wrap",gap:8 }}>{CATS.map(c=><button key={c.id} onClick={()=>onChange(c.id)} style={{ background:value===c.id?`linear-gradient(135deg,${c.color}33,${c.color}15)`:T.cardHi,border:`1px solid ${value===c.id?c.color:T.stroke}`,borderRadius:20,padding:"8px 14px",color:value===c.id?c.color:T.inkSub,fontSize:13,cursor:"pointer",fontWeight:value===c.id?700:400,transition:"all .15s" }}>{c.icon} {c.label}</button>)}</div>; }
-function TxRow({ t, onDel }){ const T=useT(); const c=catById(t.category); return (
+function TxRow({ t, onDel, onEdit }){ const T=useT(); const c=catById(t.category); return (
   <div style={{ display:"flex",alignItems:"center",gap:12,padding:"12px 0",borderBottom:`1px solid ${T.strokeSoft}` }}>
-    <Avatar icon={c.icon} color={c.color} size={44} />
-    <div style={{ flex:1,minWidth:0 }}>
+    <div onClick={onEdit} style={{ cursor:onEdit?"pointer":"default" }}>
+      <Avatar icon={c.icon} color={c.color} size={44} />
+    </div>
+    <div style={{ flex:1,minWidth:0,cursor:onEdit?"pointer":"default" }} onClick={onEdit}>
       <div style={{ fontWeight:600,fontSize:15,color:T.ink,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{t.description}</div>
       <div style={{ fontSize:12,color:T.inkDim,marginTop:2 }}>{t.date} · {c.label}{t.source?` · ${t.source}`:""}</div>
     </div>
     <div style={{ display:"flex",alignItems:"center",gap:8,flexShrink:0 }}>
       <span style={{ fontWeight:700,fontSize:15,color:t.isIncome?T.up:T.ink }}>{t.isIncome?"+":"–"}{chf(t.amount)}</span>
+      {onEdit&&<button onClick={onEdit} style={{ background:T.cardHi,border:`1px solid ${T.stroke}`,borderRadius:8,color:T.inkDim,cursor:"pointer",fontSize:13,padding:"4px 8px",lineHeight:1 }}>✏️</button>}
       {onDel&&<button onClick={onDel} style={{ background:"none",border:"none",color:T.inkDim,cursor:"pointer",fontSize:20,padding:"0 2px",lineHeight:1 }}>×</button>}
     </div>
   </div>
@@ -557,6 +545,13 @@ export default function App() {
   const addTx=d=>{setTxs(p=>[{id:Date.now()+Math.random(),...d},...p]);setToast("Ajouté");};
   const delTx=id=>{setTxs(p=>p.filter(x=>x.id!==id));setToast("Supprimé");setConfirm(null);};
   const askDel=t=>setConfirm({id:t.id,label:t.description});
+  const [editTx,setEditTx]=useState(null); // transaction being edited
+  function updateTx(id, changes){ setTxs(p=>p.map(t=>t.id===id?{...t,...changes}:t)); setToast("✅ Modifié"); }
+  function bulkRecategorize(fromDesc, toCategory){
+    const count=txs.filter(t=>t.description.trim()===fromDesc.trim()&&!t.isIncome).length;
+    setTxs(p=>p.map(t=>t.description.trim()===fromDesc.trim()&&!t.isIncome?{...t,category:toCategory}:t));
+    setToast("✅ "+count+" transaction"+(count>1?"s":""+" recatégorisée"+(count>1?"s":"")));
+  }
   const addInc=d=>{setIncomes(p=>[...p,{id:Date.now(),...d}]);setToast("Revenu ajouté");};
   const delInc=id=>setIncomes(p=>p.filter(x=>x.id!==id));
   const addRec=d=>{setRecurring(p=>[...p,{id:Date.now(),...d}]);setToast("Ajouté");};
@@ -670,7 +665,7 @@ export default function App() {
               <div style={{ fontSize:13,fontWeight:700,color:T.inkDim,letterSpacing:.5 }}>RÉCENTES</div>
               <button onClick={()=>setSheet("history")} style={{ background:"none",border:"none",color:T.indigoLt,fontSize:13,fontWeight:700,cursor:"pointer" }}>Tout voir</button>
             </div>
-            <Glass pad="0 16px" r={20}>{C.exp.slice(0,6).map(t=><TxRow key={t.id} t={t} onDel={()=>askDel(t)} />)}</Glass>
+            <Glass pad="0 16px" r={20}>{C.exp.slice(0,6).map(t=><TxRow key={t.id} t={t} onDel={()=>askDel(t)} onEdit={()=>setEditTx(t)} />)}</Glass>
           </div>
         )}
 
@@ -1045,13 +1040,46 @@ export default function App() {
       </Sheet>
     );
   }
+  function EditTxSheet(){
+    const T=useT();
+    const [desc,setDesc]=useState(editTx?.description||"");
+    const [cat,setCat]=useState(editTx?.category||"autre");
+    if(!editTx) return null;
+    const sameDesc=txs.filter(t=>t.description.trim()===editTx.description.trim()&&!t.isIncome&&t.id!==editTx.id);
+    return (
+      <Sheet title="Modifier" subtitle={editTx.description} onClose={()=>setEditTx(null)}>
+        <Field label="Nom de la transaction">
+          <TInput value={desc} onChange={e=>setDesc(e.target.value)} placeholder="Nom du marchand" />
+        </Field>
+        <Field label="Catégorie">
+          <CatPicker value={cat} onChange={setCat} />
+        </Field>
+        <TBtn full onClick={()=>{ updateTx(editTx.id,{description:desc,category:cat}); setEditTx(null); }} style={{marginBottom:12}}>
+          Enregistrer
+        </TBtn>
+        {sameDesc.length>0&&(
+          <div style={{ marginTop:8 }}>
+            <div style={{ height:1,background:T.strokeSoft,marginBottom:16 }} />
+            <div style={{ fontSize:13,fontWeight:700,color:T.inkDim,marginBottom:6 }}>RECATÉGORISER EN MASSE</div>
+            <div style={{ fontSize:13,color:T.inkSub,marginBottom:14,lineHeight:1.5 }}>
+              {sameDesc.length + 1} transaction{sameDesc.length>0?"s":""} avec le nom <span style={{color:T.ink,fontWeight:700}}>"{editTx.description}"</span> — appliquer la catégorie <span style={{color:catById(cat).color,fontWeight:700}}>{catById(cat).icon} {catById(cat).label}</span> à toutes ?
+            </div>
+            <TBtn full variant="down" onClick={()=>{ bulkRecategorize(editTx.description,cat); setEditTx(null); }}>
+              Appliquer à toutes ({sameDesc.length+1})
+            </TBtn>
+          </div>
+        )}
+      </Sheet>
+    );
+  }
+
   function HistorySheet(){
     const f=txs.filter(t=>!searchQ||t.description?.toLowerCase().includes(searchQ.toLowerCase())).slice(0,120);
     return (
       <Sheet title="Historique" onClose={()=>setSheet(null)}>
         <div style={{ marginBottom:16 }}><TInput placeholder="🔍 Rechercher…" value={searchQ} onChange={e=>setSearchQ(e.target.value)} /></div>
         {f.length===0&&<Empty>Aucune transaction</Empty>}
-        <Glass pad="0 16px" r={20}>{f.map(t=><TxRow key={t.id} t={t} onDel={()=>askDel(t)} />)}</Glass>
+        <Glass pad="0 16px" r={20}>{f.map(t=><TxRow key={t.id} t={t} onDel={()=>askDel(t)} onEdit={()=>setEditTx(t)} />)}</Glass>
       </Sheet>
     );
   }
@@ -1099,6 +1127,7 @@ export default function App() {
       {sheet==="import"&&impLoad&&<ImportLoad />}
       {sheet==="review"&&!impLoad&&<ReviewSheet />}
       {sheet==="history"&&<HistorySheet />}
+      {editTx&&<EditTxSheet />}
       {sheet==="catDetail"&&catDetail&&<CatDetailSheet />}
       {sheet==="merchDetail"&&merchDetail&&<MerchDetailSheet />}
       {sheet==="incDetail"&&<IncDetailSheet />}
