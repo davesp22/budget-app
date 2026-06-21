@@ -143,8 +143,8 @@ const BASE_CATS = [
   { id:"autre",        label:"Autre",        icon:"📦", color:"#8E8EA8",
     kw:[] },
 ];
-let _cats = BASE_CATS; // will be overridden by App state
-const catById = id => _cats.find(c => c.id === id) || _cats[_cats.length-1];
+const catById = id => BASE_CATS.find(c => c.id === id) || BASE_CATS[BASE_CATS.length-1];
+const catByIdDyn = (id, cats) => cats.find(c => c.id === id) || cats[cats.length-1];
 
 // ════════════════════════════════════════════════════════════════════════════
 //  CSV PARSING
@@ -453,7 +453,7 @@ function Field({ label, children }){ const T=useT(); return <div style={{ margin
 function TInput(props){ const T=useT(); return <input {...props} style={{ width:"100%",background:T.cardHi,border:`1px solid ${T.stroke}`,borderRadius:15,padding:"15px 16px",color:T.ink,fontSize:16,outline:"none",boxSizing:"border-box",fontFamily:"inherit",...props.style }} />; }
 function TBtn({ children, variant="primary", full, onClick }){ const T=useT(); const bg=variant==="primary"?`linear-gradient(135deg,${T.indigo},${T.violet})`:variant==="up"?`linear-gradient(135deg,${T.up},#5AF0B8)`:variant==="down"?`linear-gradient(135deg,${T.down},#FF8AA0)`:T.cardHi; const col=variant==="ghost"?T.inkSub:"#fff"; return <button onClick={onClick} style={{ background:bg,color:col,border:variant==="ghost"?`1px solid ${T.stroke}`:"none",borderRadius:17,padding:"16px 24px",fontWeight:700,fontSize:16,cursor:"pointer",width:full?"100%":"auto",fontFamily:"inherit",boxShadow:variant!=="ghost"?`0 6px 22px ${T.glow}`:"none",marginTop:4 }}>{children}</button>; }
 function CatPicker({ value, onChange, cats=BASE_CATS }){ const T=useT(); return <div style={{ display:"flex",flexWrap:"wrap",gap:8 }}>{cats.map(c=><button key={c.id} onClick={()=>onChange(c.id)} style={{ background:value===c.id?`linear-gradient(135deg,${c.color}33,${c.color}15)`:T.cardHi,border:`1px solid ${value===c.id?c.color:T.stroke}`,borderRadius:20,padding:"8px 14px",color:value===c.id?c.color:T.inkSub,fontSize:13,cursor:"pointer",fontWeight:value===c.id?700:400,transition:"all .15s" }}>{c.icon} {c.label}</button>)}</div>; }
-function TxRow({ t, onDel, onEdit }){ const T=useT(); const c=catById(t.category); return (
+function TxRow({ t, onDel, onEdit, cats }){ const T=useT(); const c=cats?catByIdDyn(t.category,cats):catById(t.category); return (
   <div style={{ display:"flex",alignItems:"center",gap:12,padding:"12px 0",borderBottom:`1px solid ${T.strokeSoft}` }}>
     <div onClick={onEdit} style={{ cursor:onEdit?"pointer":"default" }}>
       <Avatar icon={c.icon} color={c.color} size={44} />
@@ -508,6 +508,9 @@ export default function App() {
   useEffect(()=>save(SK.cats,customCats),[customCats]);
   useEffect(()=>save(SK.rules,learnedRules),[learnedRules]);
 
+  // All categories (base + custom) — stable memo
+  const allCats = useMemo(()=>[...BASE_CATS.filter(c=>c.id!=="autre"), ...customCats, BASE_CATS[BASE_CATS.length-1]], [customCats]);
+
   // ── Computed ──────────────────────────────────────────────────────────────
   const C=useMemo(()=>{
     const mTx=txs.filter(t=>{const d=new Date(t.date);return d.getMonth()===month&&d.getFullYear()===year;});
@@ -557,10 +560,6 @@ export default function App() {
   const addTx=d=>{setTxs(p=>[{id:Date.now()+Math.random(),...d},...p]);setToast("Ajouté");};
   const delTx=id=>{setTxs(p=>p.filter(x=>x.id!==id));setToast("Supprimé");setConfirm(null);};
   const askDel=t=>setConfirm({id:t.id,label:t.description});
-  // Merge base + custom categories, update global ref
-  const allCats = [...BASE_CATS.filter(c=>c.id!=="autre"), ...customCats, BASE_CATS[BASE_CATS.length-1]];
-  _cats = allCats;
-
   const [editTx,setEditTx]=useState(null);
   const [editCat,setEditCat]=useState(null); // null | "new" | catId // transaction being edited
   function updateTx(id, changes){
@@ -710,7 +709,7 @@ export default function App() {
               <div style={{ fontSize:13,fontWeight:700,color:T.inkDim,letterSpacing:.5 }}>RÉCENTES</div>
               <button onClick={()=>setSheet("history")} style={{ background:"none",border:"none",color:T.indigoLt,fontSize:13,fontWeight:700,cursor:"pointer" }}>Tout voir</button>
             </div>
-            <Glass pad="0 16px" r={20}>{C.exp.slice(0,6).map(t=><TxRow key={t.id} t={t} onDel={()=>askDel(t)} onEdit={()=>setEditTx(t)} />)}</Glass>
+            <Glass pad="0 16px" r={20}>{C.exp.slice(0,6).map(t=><TxRow key={t.id} t={t} cats={allCats} onDel={()=>askDel(t)} onEdit={()=>setEditTx(t)} />)}</Glass>
           </div>
         )}
 
@@ -956,7 +955,7 @@ export default function App() {
         <Section label="RÈGLES APPRISES">
           <Glass r={20} pad="0" style={{ overflow:"hidden" }}>
             {Object.keys(learnedRules).length===0&&<Empty>Aucune règle — modifie une catégorie pour en créer</Empty>}
-            {Object.entries(learnedRules).slice(0,20).map(([desc,cat],i,arr)=>{ const c=catById(cat); return (
+            {Object.entries(learnedRules).slice(0,20).map(([desc,cat],i,arr)=>{ const c=catByIdDyn(cat,allCats); return (
               <div key={desc} style={rowStyle(T,i<arr.length-1)}>
                 <div style={{ minWidth:0,flex:1 }}>
                   <div style={{ fontWeight:600,fontSize:14,color:T.ink,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{desc}</div>
@@ -1078,13 +1077,13 @@ export default function App() {
           <Glass r={16} pad="14px 16px" style={{ flex:1 }}><div style={{ fontSize:11,color:T.inkDim,fontWeight:600,marginBottom:4 }}>MOY./VISITE</div><div style={{ fontSize:18,fontWeight:800,color:T.inkSub }}>{chf(avgPerVisit)}</div></Glass>
         </div>
         {list.length===0&&<Empty>Aucune dépense ce mois</Empty>}
-        <Glass pad="0 16px" r={20}>{list.map(t=><TxRow key={t.id} t={t} onDel={()=>askDel(t)} onEdit={()=>setEditTx(t)} />)}</Glass>
+        <Glass pad="0 16px" r={20}>{list.map(t=><TxRow key={t.id} t={t} cats={allCats} onDel={()=>askDel(t)} onEdit={()=>setEditTx(t)} />)}</Glass>
       </Sheet>
     );
   }
 
   function CatDetailSheet(){
-    const c=catById(catDetail);
+    const c=catByIdDyn(catDetail,allCats);
     const list=C.exp.filter(t=>t.category===catDetail).sort((a,b)=>new Date(b.date)-new Date(a.date));
     const total=list.reduce((s,t)=>s+ +t.amount,0);
     return (
@@ -1093,7 +1092,7 @@ export default function App() {
           <Glass r={16} pad="14px 16px" style={{ flex:1 }}><div style={{ fontSize:11,color:T.inkDim,fontWeight:600,marginBottom:4 }}>TOTAL</div><div style={{ fontSize:20,fontWeight:800,color:c.color }}>{chf(total)}</div></Glass>
         </div>
         {list.length===0&&<Empty>Aucune dépense</Empty>}
-        <Glass pad="0 16px" r={20}>{list.map(t=><TxRow key={t.id} t={t} onDel={()=>askDel(t)} onEdit={()=>setEditTx(t)} />)}</Glass>
+        <Glass pad="0 16px" r={20}>{list.map(t=><TxRow key={t.id} t={t} cats={allCats} onDel={()=>askDel(t)} onEdit={()=>setEditTx(t)} />)}</Glass>
       </Sheet>
     );
   }
@@ -1133,7 +1132,7 @@ export default function App() {
             <div style={{ height:1,background:T.strokeSoft,marginBottom:16 }} />
             <div style={{ fontSize:13,fontWeight:700,color:T.inkDim,marginBottom:6 }}>RECATÉGORISER EN MASSE</div>
             <div style={{ fontSize:13,color:T.inkSub,marginBottom:14,lineHeight:1.5 }}>
-              {sameDesc.length + 1} transaction{sameDesc.length>0?"s":""} avec le nom <span style={{color:T.ink,fontWeight:700}}>"{editTx.description}"</span> — appliquer la catégorie <span style={{color:catById(cat).color,fontWeight:700}}>{catById(cat).icon} {catById(cat).label}</span> à toutes ?
+              {sameDesc.length + 1} transaction{sameDesc.length>0?"s":""} avec le nom <span style={{color:T.ink,fontWeight:700}}>"{editTx.description}"</span> — appliquer la catégorie <span style={{color:catByIdDyn(cat,allCats).color,fontWeight:700}}>{catByIdDyn(cat,allCats).icon} {catByIdDyn(cat,allCats).label}</span> à toutes ?
             </div>
             <TBtn full variant="down" onClick={()=>{ bulkRecategorize(editTx.description,cat); setEditTx(null); }}>
               Appliquer à toutes ({sameDesc.length+1})
@@ -1147,8 +1146,8 @@ export default function App() {
   function EditCatSheet(){
     const T=useT();
     const isNew=editCat==="new";
-    const existing=isNew?null:customCats.find(c=>c.id===editCat);
-    const [label,setLabel]=useState(existing?.label||"");
+    const existing=isNew?null:customCats.find(cat=>cat.id===editCat);
+    const [label,setLabel]=useState(existing?.label||"");  // eslint-disable-line
     const [icon,setIcon]=useState(existing?.icon||"📦");
     const [color,setColor]=useState(existing?.color||"#6E5DF0");
     if(!editCat)return null;
@@ -1192,7 +1191,7 @@ export default function App() {
       <Sheet title="Historique" onClose={()=>setSheet(null)}>
         <div style={{ marginBottom:16 }}><TInput placeholder="🔍 Rechercher…" value={searchQ} onChange={e=>setSearchQ(e.target.value)} /></div>
         {f.length===0&&<Empty>Aucune transaction</Empty>}
-        <Glass pad="0 16px" r={20}>{f.map(t=><TxRow key={t.id} t={t} onDel={()=>askDel(t)} onEdit={()=>setEditTx(t)} />)}</Glass>
+        <Glass pad="0 16px" r={20}>{f.map(t=><TxRow key={t.id} t={t} cats={allCats} onDel={()=>askDel(t)} onEdit={()=>setEditTx(t)} />)}</Glass>
       </Sheet>
     );
   }
