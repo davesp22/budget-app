@@ -77,7 +77,6 @@ const SELF_NAMES = ["esposito davide","davide esposito","esposito, davide","espo
 
 // TWINT personnes connues — sortantes → catégorie spécifique
 const TWINT_OUT_MAP = {
-  "choue":             "logement",    // loyer
   "oberson":           "loisirs",     // Spotify famille
   "digitecgalaxus":    "tech",
   "bestsecretgmbh":    "vetements",
@@ -167,7 +166,6 @@ function smartCat(desc, act){
     // Ordre permanent Oberson → Loisirs (Spotify)
     if(d.includes("oberson")) return "loisirs";
     // CHOUE → Logement (loyer)
-    if(d.includes("choue") || d.includes("chou ")) return "logement";
     // Map TWINT noms spéciaux
     for(const [name,cat] of Object.entries(TWINT_OUT_MAP)){
       if(d.includes(name)) return cat;
@@ -202,7 +200,8 @@ function parseYuhReal(lines){
   const H=splitCSV(lines[0]).map(x=>cc(x).toLowerCase());
   const dI=H.indexOf("date"),tI=H.indexOf("activity type"),nI=H.indexOf("activity name"),dbI=H.indexOf("debit"),crI=H.indexOf("credit"),rI=H.indexOf("recipient");
   const out=[];
-  for(let i=1;i<lines.length;i++){ if(!lines[i].trim())continue; const c=splitCSV(lines[i]); const act=cc(c[tI]||""); if(NEON_SKIP.includes(act))continue; const date=toDate(c[dI]||""); if(!date)continue; const raw=cc(c[nI]||""),recip=cc(c[rI]||""); const desc=recip||raw.replace(/^Twint (à|de) /i,"").replace(/^Transfert (à|de) /i,"").trim(); const debit=toAmt(c[dbI]||""),credit=toAmt(c[crI]||""); const isInc=NEON_IN.includes(act)||credit>0; const amt=Math.abs(debit||credit); if(!amt)continue; out.push({date,description:desc,amount:amt,isIncome:isInc,category:isInc?"income":smartCat(desc+" "+raw,act),source:"yuh"}); }
+  for(let i=1;i<lines.length;i++){ if(!lines[i].trim())continue; const c=splitCSV(lines[i]); const act=cc(c[tI]||""); if(NEON_SKIP.includes(act))continue; const date=toDate(c[dI]||""); if(!date)continue; const raw=cc(c[nI]||""),recip=cc(c[rI]||""); const desc=recip||raw.replace(/^Twint (à|de) /i,"").replace(/^Transfert (à|de) /i,"").trim(); const debit=toAmt(c[dbI]||""),credit=toAmt(c[crI]||""); const isInc=NEON_IN.includes(act)||credit>0; const amt=Math.abs(debit||credit); if(!amt)continue; if(!isInc && isSelfTransfer(desc+" "+raw)) continue;
+    out.push({date,description:desc,amount:amt,isIncome:isInc,category:isInc?"income":smartCat(desc+" "+raw,act),source:"yuh"}); }
   return out;
 }
 function parseNeonReal(lines){
