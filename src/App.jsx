@@ -92,7 +92,7 @@ const TWINT_PERSONS = ["marshall","dylan","thierry","arbian","maman","papa","jag
 // TWINT personnes connues — entrantes → revenus
 const TWINT_IN_KNOWN = ["beaud tiphaine","mettraux vincent","yerly simon","jager kylian","jorand baptiste","esposito samuel","esposito-mezza consiglia"];
 
-const CATS = [
+const BASE_CATS = [
   { id:"alimentation", label:"Alimentation", icon:"🛒", color:"#34E5A0",
     kw:["coop","migros","aldi","lidl","denner","spar","volg","pick pay","laiterie","boucherie","boulangerie","fromagerie","epicerie","manor food","supermarché","grocery","cominox","gottardo","pascal rossier","landi","too good to go","toogoodtogo","k kiosk","kiosk","tabac"] },
   { id:"restaurant",   label:"Restaurant",   icon:"🍽️", color:"#FFC95C",
@@ -143,7 +143,8 @@ const CATS = [
   { id:"autre",        label:"Autre",        icon:"📦", color:"#8E8EA8",
     kw:[] },
 ];
-const catById = id => CATS.find(c => c.id === id) || CATS[CATS.length-1];
+let _cats = BASE_CATS; // will be overridden by App state
+const catById = id => _cats.find(c => c.id === id) || _cats[_cats.length-1];
 
 // ════════════════════════════════════════════════════════════════════════════
 //  CSV PARSING
@@ -156,6 +157,11 @@ const cc = s => (s||"").replace(/"""/g,"").replace(/"/g,"").trim();
 function splitCSV(line){ const r=[],sep=";"; let c="",q=false; for(const ch of line){ if(ch==='"'){q=!q;continue;} if(ch===sep&&!q){r.push(c.trim());c="";continue;} c+=ch; } r.push(c.trim()); return r; }
 function toDate(s){ const c=cc(s); let m=c.match(/^(\d{1,2})[./](\d{1,2})[./](\d{4})/); if(m)return`${m[3]}-${m[2].padStart(2,"0")}-${m[1].padStart(2,"0")}`; m=c.match(/^(\d{4})-(\d{2})-(\d{2})/); return m?c.slice(0,10):null; }
 function toAmt(s){ const n=parseFloat(cc(s).replace(/['''\s]/g,"").replace(",",".").replace(/[^0-9.\-]/g,"")); return isNaN(n)?0:n; }
+function applyLearnedRules(desc, learnedRules){
+  if(!desc||!learnedRules) return null;
+  return learnedRules[desc.trim().toLowerCase()] || null;
+}
+
 function isSelfTransfer(desc){
   const d=(desc||"").toLowerCase();
   return SELF_NAMES.some(n=>d.includes(n));
@@ -279,7 +285,7 @@ async function aiCategorize(txs){
 // ════════════════════════════════════════════════════════════════════════════
 //  STORAGE & FORMAT
 // ════════════════════════════════════════════════════════════════════════════
-const SK={tx:"aur_tx",inc:"aur_inc",rec:"aur_rec",bud:"aur_bud",theme:"aur_theme"};
+const SK={tx:"aur_tx",inc:"aur_inc",rec:"aur_rec",bud:"aur_bud",theme:"aur_theme",cats:"aur_cats",rules:"aur_rules"};
 const load=(k,fb)=>{try{const v=localStorage.getItem(k);return v?JSON.parse(v):fb;}catch{return fb;}};
 const save=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v));}catch{}};
 const chf=n=>`CHF ${Math.abs(+n).toFixed(2)}`;
@@ -446,7 +452,7 @@ function Sheet({ title, subtitle, onClose, children }) {
 function Field({ label, children }){ const T=useT(); return <div style={{ marginBottom:16 }}>{label&&<div style={{ fontSize:12,color:T.inkDim,fontWeight:700,marginBottom:8,letterSpacing:.8,textTransform:"uppercase" }}>{label}</div>}{children}</div>; }
 function TInput(props){ const T=useT(); return <input {...props} style={{ width:"100%",background:T.cardHi,border:`1px solid ${T.stroke}`,borderRadius:15,padding:"15px 16px",color:T.ink,fontSize:16,outline:"none",boxSizing:"border-box",fontFamily:"inherit",...props.style }} />; }
 function TBtn({ children, variant="primary", full, onClick }){ const T=useT(); const bg=variant==="primary"?`linear-gradient(135deg,${T.indigo},${T.violet})`:variant==="up"?`linear-gradient(135deg,${T.up},#5AF0B8)`:variant==="down"?`linear-gradient(135deg,${T.down},#FF8AA0)`:T.cardHi; const col=variant==="ghost"?T.inkSub:"#fff"; return <button onClick={onClick} style={{ background:bg,color:col,border:variant==="ghost"?`1px solid ${T.stroke}`:"none",borderRadius:17,padding:"16px 24px",fontWeight:700,fontSize:16,cursor:"pointer",width:full?"100%":"auto",fontFamily:"inherit",boxShadow:variant!=="ghost"?`0 6px 22px ${T.glow}`:"none",marginTop:4 }}>{children}</button>; }
-function CatPicker({ value, onChange }){ const T=useT(); return <div style={{ display:"flex",flexWrap:"wrap",gap:8 }}>{CATS.map(c=><button key={c.id} onClick={()=>onChange(c.id)} style={{ background:value===c.id?`linear-gradient(135deg,${c.color}33,${c.color}15)`:T.cardHi,border:`1px solid ${value===c.id?c.color:T.stroke}`,borderRadius:20,padding:"8px 14px",color:value===c.id?c.color:T.inkSub,fontSize:13,cursor:"pointer",fontWeight:value===c.id?700:400,transition:"all .15s" }}>{c.icon} {c.label}</button>)}</div>; }
+function CatPicker({ value, onChange }){ const T=useT(); return <div style={{ display:"flex",flexWrap:"wrap",gap:8 }}>{allCats.map(c=><button key={c.id} onClick={()=>onChange(c.id)} style={{ background:value===c.id?`linear-gradient(135deg,${c.color}33,${c.color}15)`:T.cardHi,border:`1px solid ${value===c.id?c.color:T.stroke}`,borderRadius:20,padding:"8px 14px",color:value===c.id?c.color:T.inkSub,fontSize:13,cursor:"pointer",fontWeight:value===c.id?700:400,transition:"all .15s" }}>{c.icon} {c.label}</button>)}</div>; }
 function TxRow({ t, onDel, onEdit }){ const T=useT(); const c=catById(t.category); return (
   <div style={{ display:"flex",alignItems:"center",gap:12,padding:"12px 0",borderBottom:`1px solid ${T.strokeSoft}` }}>
     <div onClick={onEdit} style={{ cursor:onEdit?"pointer":"default" }}>
@@ -476,6 +482,8 @@ export default function App() {
   const [tab,setTab]=useState("home");
   const [month,setMonth]=useState(now.getMonth());
   const [year,setYear]=useState(now.getFullYear());
+  const [customCats,setCustomCats]=useState(()=>load(SK.cats,[]));
+  const [learnedRules,setLearnedRules]=useState(()=>load(SK.rules,{})); // {desc: catId}
   const [txs,setTxs]=useState(()=>load(SK.tx,[]));
   const [incomes,setIncomes]=useState(()=>load(SK.inc,[]));
   const [recurring,setRecurring]=useState(()=>load(SK.rec,[]));
@@ -499,6 +507,8 @@ export default function App() {
   useEffect(()=>save(SK.rec,recurring),[recurring]);
   useEffect(()=>save(SK.bud,budgets),[budgets]);
   useEffect(()=>save(SK.theme,themeKey),[themeKey]);
+  useEffect(()=>save(SK.cats,customCats),[customCats]);
+  useEffect(()=>save(SK.rules,learnedRules),[learnedRules]);
 
   // ── Computed ──────────────────────────────────────────────────────────────
   const C=useMemo(()=>{
@@ -549,8 +559,41 @@ export default function App() {
   const addTx=d=>{setTxs(p=>[{id:Date.now()+Math.random(),...d},...p]);setToast("Ajouté");};
   const delTx=id=>{setTxs(p=>p.filter(x=>x.id!==id));setToast("Supprimé");setConfirm(null);};
   const askDel=t=>setConfirm({id:t.id,label:t.description});
-  const [editTx,setEditTx]=useState(null); // transaction being edited
-  function updateTx(id, changes){ setTxs(p=>p.map(t=>t.id===id?{...t,...changes}:t)); setToast("✅ Modifié"); }
+  // Merge base + custom categories, update global ref
+  const allCats = [...BASE_CATS.filter(c=>c.id!=="autre"), ...customCats, BASE_CATS[BASE_CATS.length-1]];
+  _cats = allCats;
+
+  const [editTx,setEditTx]=useState(null);
+  const [editCat,setEditCat]=useState(null); // null | "new" | catId // transaction being edited
+  function updateTx(id, changes){
+    setTxs(p=>p.map(t=>t.id===id?{...t,...changes}:t));
+    // Learn the rule if category changed
+    if(changes.category){
+      const tx=txs.find(t=>t.id===id);
+      if(tx && tx.description){
+        setLearnedRules(r=>({...r,[tx.description.trim().toLowerCase()]:changes.category}));
+      }
+    }
+    setToast("✅ Modifié");
+  }
+  const EMOJI_LIST=["🛒","🍽️","🚗","🎮","💊","👕","🏠","💻","📲","📦","🎵","🏋️","✈️","🐾","🎁","☕","🏦","📚","🎨","🐟","🧴","🔧","💈","🌿","🎯","🏊","🎸","🧹","🛍️","💰"];
+  const COLOR_LIST=["#34E5A0","#FFC95C","#4FD8E8","#B66BFF","#FF9F5C","#FF6BAE","#5CC8FF","#6E5DF0","#FF8A3D","#94A3B8","#F87171","#34D399","#60A5FA","#FBBF24","#A78BFA","#FB7185"];
+
+  function addCustomCat(cat){
+    setCustomCats(p=>[...p,{...cat,id:"custom_"+Date.now(),kw:[]}]);
+    setToast("✅ Catégorie créée");
+  }
+  function updateCustomCat(id, changes){
+    setCustomCats(p=>p.map(c=>c.id===id?{...c,...changes}:c));
+    setToast("✅ Catégorie modifiée");
+  }
+  function deleteCustomCat(id){
+    setCustomCats(p=>p.filter(c=>c.id!==id));
+    // Move transactions from deleted cat to "autre"
+    setTxs(p=>p.map(t=>t.category===id?{...t,category:"autre"}:t));
+    setToast("🗑 Catégorie supprimée");
+  }
+
   function bulkRecategorize(fromDesc, toCategory){
     const count=txs.filter(t=>t.description.trim()===fromDesc.trim()&&!t.isIncome).length;
     setTxs(p=>p.map(t=>t.description.trim()===fromDesc.trim()&&!t.isIncome?{...t,category:toCategory}:t));
@@ -568,7 +611,7 @@ export default function App() {
     setImpLoad(true); setSheet("import");
     const parsed=parseCSV(await f.text());
     if(!parsed||!parsed.length){setImpLoad(false);setToast("Format non reconnu");setSheet(null);return;}
-    const wc=parsed.map(t=>({...t,category:t.isIncome?"income":smartCat(t.description,"")}));
+    const wc=parsed.map(t=>({...t,category:t.isIncome?"income":(applyLearnedRules(t.description,learnedRules)||smartCat(t.description,""))}));
     try{ const map=await aiCategorize(wc); setImpItems(wc.map((t,i)=>({...t,category:map[t.description+"|"+t.amount]||t.category,_idx:i,_on:true}))); }
     catch{ setImpItems(wc.map((t,i)=>({...t,_idx:i,_on:true}))); }
     setImpLoad(false); setSheet("review");
@@ -583,7 +626,7 @@ export default function App() {
   // ════════════════════════════════════════════════════════════════════════
   function Home(){
     const balCol=C.balance>=0?T.up:T.down;
-    const cats=CATS.filter(c=>C.byCat[c.id]>0);
+    const cats=allCats.filter(c=>C.byCat[c.id]>0);
     return (
       <div style={{ paddingBottom:8 }}>
         {/* Hero */}
@@ -643,17 +686,17 @@ export default function App() {
             <div style={{ fontSize:13,fontWeight:700,color:T.inkDim,letterSpacing:.5,marginBottom:12 }}>PAR CATÉGORIE</div>
             <div style={{ display:"flex",flexDirection:"column",gap:8 }}>
               {cats.sort((a,b)=>(C.byCat[b.id]||0)-(C.byCat[a.id]||0)).map(c=>{
-                const sp=C.byCat[c.id]||0,b=+budgets[c.id]||0,pr=C.pByCat[c.id]||0,tr=pr>0?(sp-pr)/pr*100:null,over=b>0&&sp>b;
+                const sp=C.byCat[c.id]||0,pr=C.pByCat[c.id]||0,tr=pr>0?(sp-pr)/pr*100:null,over=false;
                 return (
-                  <Glass key={c.id} r={18} pad="14px 16px" onClick={()=>{setCatDetail(c.id);setSheet("catDetail");}} style={{ cursor:"pointer",border:`1px solid ${over?T.down+"44":T.stroke}` }}>
+                  <Glass key={c.id} r={18} pad="14px 16px" onClick={()=>{setCatDetail(c.id);setSheet("catDetail");}} style={{ cursor:"pointer" }}>
                     <div style={{ display:"flex",alignItems:"center",gap:12 }}>
                       <Avatar icon={c.icon} color={c.color} size={44} />
                       <div style={{ flex:1,minWidth:0 }}>
                         <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:b>0?8:0 }}>
                           <div><div style={{ fontWeight:700,fontSize:15,color:T.ink }}>{c.label}</div>{tr!==null&&<div style={{ fontSize:12,color:tr>0?T.down:T.up,marginTop:2 }}>{tr>0?"+":""}{tr.toFixed(0)}% vs mois dernier</div>}</div>
-                          <div style={{ textAlign:"right" }}><div style={{ fontWeight:800,fontSize:16,color:over?T.down:c.color }}>{chf(sp)}</div>{b>0&&<div style={{ fontSize:11,color:T.inkDim }}>/ {chf(b)}</div>}</div>
+                          <div style={{ textAlign:"right" }}><div style={{ fontWeight:800,fontSize:16,color:c.color }}>{chf(sp)}</div></div>
                         </div>
-                        {b>0&&<Bar v={sp} max={b} color={over?T.down:c.color} />}
+
                       </div>
                     </div>
                   </Glass>
@@ -689,8 +732,8 @@ export default function App() {
   //  ANALYSE  (la nouvelle section qui tape à l'œil)
   // ════════════════════════════════════════════════════════════════════════
   function Analyse(){
-    const cats=CATS.filter(c=>C.byCat[c.id]>0).sort((a,b)=>(C.byCat[b.id]||0)-(C.byCat[a.id]||0));
-    const donutData=cats.map(c=>({value:C.byCat[c.id],color:c.color,label:c.label,id:c.id}));
+    const cats=allCats.filter(c=>C.byCat[c.id]>0).sort((a,b)=>(C.byCat[b.id]||0)-(C.byCat[a.id]||0));
+    const donutData=cats.map(c=>({value:C.byCat[c.id]||0,color:c.color,label:c.label,id:c.id}));
     const last6=useMemo(()=>{
       const arr=[];
       for(let i=5;i>=0;i--){ let m=month-i,y=year; while(m<0){m+=12;y--;} const mTx=txs.filter(t=>{const d=new Date(t.date);return d.getMonth()===m&&d.getFullYear()===y&&!t.isIncome;}); const rec=recurring.reduce((s,r)=>s+ +r.amount,0); arr.push({label:MS[m],value:mTx.reduce((s,t)=>s+ +t.amount,0)+rec}); }
@@ -880,21 +923,55 @@ export default function App() {
         </Section>
 
         {/* Budgets */}
-        <Section label="BUDGETS PAR CATÉGORIE">
+
+
+        {/* Data */}
+        <Section label="MES CATÉGORIES" action={<AddBtn color={T.indigoLt} onClick={()=>setEditCat("new")} />}>
           <Glass r={20} pad="0" style={{ overflow:"hidden" }}>
-            {CATS.filter(c=>c.id!=="autre"&&c.id!=="twint").map((c,i,a)=>(
-              <div key={c.id} style={rowStyle(T,i<a.length-1)}>
-                <div style={{ display:"flex",alignItems:"center",gap:10 }}><span style={{ fontSize:20 }}>{c.icon}</span><span style={{ fontSize:15,color:T.ink,fontWeight:500 }}>{c.label}</span></div>
-                <div style={{ display:"flex",alignItems:"center",gap:6 }}><span style={{ fontSize:12,color:T.inkDim }}>CHF</span><input type="number" placeholder="—" value={budgets[c.id]||""} onChange={e=>setBudgets(p=>({...p,[c.id]:e.target.value}))} style={{ width:72,background:T.cardHi,border:`1px solid ${T.stroke}`,borderRadius:10,padding:"7px 10px",color:T.ink,fontSize:14,textAlign:"right",outline:"none",fontFamily:"inherit" }} /></div>
+            {/* Base categories — can be renamed */}
+            {BASE_CATS.filter(c=>c.id!=="autre"&&c.id!=="twint").map((cat,i,arr)=>(
+              <div key={cat.id} style={rowStyle(T,true)}>
+                <div style={{ display:"flex",alignItems:"center",gap:10 }}>
+                  <div style={{ width:36,height:36,borderRadius:10,background:cat.color+"22",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18 }}>{cat.icon}</div>
+                  <span style={{ fontSize:15,color:T.ink,fontWeight:500 }}>{cat.label}</span>
+                </div>
+                <span style={{ fontSize:11,color:T.inkDim }}>Intégrée</span>
               </div>
             ))}
+            {/* Custom categories — can be edited/deleted */}
+            {customCats.map((cat,i)=>(
+              <div key={cat.id} style={rowStyle(T,true)}>
+                <div style={{ display:"flex",alignItems:"center",gap:10 }}>
+                  <div style={{ width:36,height:36,borderRadius:10,background:cat.color+"22",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18 }}>{cat.icon}</div>
+                  <span style={{ fontSize:15,color:T.ink,fontWeight:500 }}>{cat.label}</span>
+                </div>
+                <div style={{ display:"flex",alignItems:"center",gap:8 }}>
+                  <button onClick={()=>setEditCat(cat.id)} style={{ background:T.cardHi,border:`1px solid ${T.stroke}`,borderRadius:8,padding:"5px 10px",color:T.inkSub,fontSize:12,cursor:"pointer" }}>✏️ Modifier</button>
+                  <Del onClick={()=>deleteCustomCat(cat.id)} />
+                </div>
+              </div>
+            ))}
+            {customCats.length===0&&BASE_CATS.length>0&&<div style={{ padding:"12px 16px",fontSize:13,color:T.inkDim }}>Appuie sur + pour créer une catégorie personnalisée</div>}
           </Glass>
         </Section>
 
-        {/* Data */}
+        <Section label="RÈGLES APPRISES">
+          <Glass r={20} pad="0" style={{ overflow:"hidden" }}>
+            {Object.keys(learnedRules).length===0&&<Empty>Aucune règle — modifie une catégorie pour en créer</Empty>}
+            {Object.entries(learnedRules).slice(0,20).map(([desc,cat],i,arr)=>{ const c=catById(cat); return (
+              <div key={desc} style={rowStyle(T,i<arr.length-1)}>
+                <div style={{ minWidth:0,flex:1 }}>
+                  <div style={{ fontWeight:600,fontSize:14,color:T.ink,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{desc}</div>
+                  <div style={{ fontSize:12,color:T.inkDim }}>→ {c.icon} {c.label}</div>
+                </div>
+                <button onClick={()=>setLearnedRules(r=>{ const n={...r}; delete n[desc]; return n; })} style={{ background:"none",border:"none",color:T.inkDim,cursor:"pointer",fontSize:20 }}>×</button>
+              </div>
+            ); })}
+          </Glass>
+        </Section>
+
         <Section label="DONNÉES">
           <Glass r={20} pad="0" style={{ overflow:"hidden" }}>
-            <Row onClick={exportJSON} icon="⬇️" title="Exporter mes données" sub="Sauvegarde JSON" />
             <Row onClick={()=>{ if(confirm)return; setConfirm({all:true,label:"toutes tes données"}); }} icon="🗑️" title="Tout effacer" sub="Supprime toutes les transactions" danger last />
           </Glass>
         </Section>
@@ -904,13 +981,7 @@ export default function App() {
     );
   }
 
-  function exportJSON(){
-    const data=JSON.stringify({txs,incomes,recurring,budgets},null,2);
-    const blob=new Blob([data],{type:"application/json"});
-    const url=URL.createObjectURL(blob); const a=document.createElement("a");
-    a.href=url; a.download=`aurora-budget-${today()}.json`; a.click(); URL.revokeObjectURL(url);
-    setToast("Données exportées");
-  }
+
 
   // ════════════════════════════════════════════════════════════════════════
   //  SHEETS
@@ -983,7 +1054,7 @@ export default function App() {
               <div style={{ minWidth:0,flex:1,marginRight:10 }}><div style={{ fontWeight:600,fontSize:14,color:T.ink,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{t.description}</div><div style={{ fontSize:11,color:T.inkDim }}>{t.date}</div></div>
               <div style={{ display:"flex",alignItems:"center",gap:10 }}><span style={{ fontWeight:700,color:T.down }}>{chf(t.amount)}</span><input type="checkbox" checked={t._on} onChange={()=>tog(t._idx)} style={{ width:18,height:18 }} /></div>
             </div>
-            {t._on&&<div style={{ display:"flex",flexWrap:"wrap",gap:5 }}>{CATS.map(cc2=><button key={cc2.id} onClick={()=>setC(t._idx,cc2.id)} style={{ background:t.category===cc2.id?cc2.color+"22":T.card,border:`1px solid ${t.category===cc2.id?cc2.color:T.stroke}`,borderRadius:14,padding:"4px 10px",color:t.category===cc2.id?cc2.color:T.inkDim,fontSize:11,cursor:"pointer",fontWeight:t.category===cc2.id?700:400 }}>{cc2.icon} {cc2.label}</button>)}</div>}
+            {t._on&&<div style={{ display:"flex",flexWrap:"wrap",gap:5 }}>{allCats.map(cc2=><button key={cc2.id} onClick={()=>setC(t._idx,cc2.id)} style={{ background:t.category===cc2.id?cc2.color+"22":T.card,border:`1px solid ${t.category===cc2.id?cc2.color:T.stroke}`,borderRadius:14,padding:"4px 10px",color:t.category===cc2.id?cc2.color:T.inkDim,fontSize:11,cursor:"pointer",fontWeight:t.category===cc2.id?700:400 }}>{cc2.icon} {cc2.label}</button>)}</div>}
           </div>
         ); })}
         <div style={{ position:"sticky",bottom:0,background:T.bg,paddingTop:12,marginTop:8 }}><TBtn full variant="up" onClick={()=>doImport(items)}>Importer {on.length} transaction{on.length>1?"s":""}</TBtn></div>
@@ -1009,7 +1080,7 @@ export default function App() {
           <Glass r={16} pad="14px 16px" style={{ flex:1 }}><div style={{ fontSize:11,color:T.inkDim,fontWeight:600,marginBottom:4 }}>MOY./VISITE</div><div style={{ fontSize:18,fontWeight:800,color:T.inkSub }}>{chf(avgPerVisit)}</div></Glass>
         </div>
         {list.length===0&&<Empty>Aucune dépense ce mois</Empty>}
-        <Glass pad="0 16px" r={20}>{list.map(t=><TxRow key={t.id} t={t} onDel={()=>askDel(t)} />)}</Glass>
+        <Glass pad="0 16px" r={20}>{list.map(t=><TxRow key={t.id} t={t} onDel={()=>askDel(t)} onEdit={()=>setEditTx(t)} />)}</Glass>
       </Sheet>
     );
   }
@@ -1017,16 +1088,14 @@ export default function App() {
   function CatDetailSheet(){
     const c=catById(catDetail);
     const list=C.exp.filter(t=>t.category===catDetail).sort((a,b)=>new Date(b.date)-new Date(a.date));
-    const total=list.reduce((s,t)=>s+ +t.amount,0), b=+budgets[catDetail]||0;
+    const total=list.reduce((s,t)=>s+ +t.amount,0);
     return (
       <Sheet title={c.label} subtitle={`${MONTHS[month]} ${year}`} onClose={()=>setSheet(null)}>
         <div style={{ display:"flex",gap:10,marginBottom:18 }}>
           <Glass r={16} pad="14px 16px" style={{ flex:1 }}><div style={{ fontSize:11,color:T.inkDim,fontWeight:600,marginBottom:4 }}>TOTAL</div><div style={{ fontSize:20,fontWeight:800,color:c.color }}>{chf(total)}</div></Glass>
-          {b>0&&<Glass r={16} pad="14px 16px" style={{ flex:1 }}><div style={{ fontSize:11,color:T.inkDim,fontWeight:600,marginBottom:4 }}>BUDGET</div><div style={{ fontSize:20,fontWeight:800,color:total>b?T.down:T.up }}>{chf(b)}</div></Glass>}
         </div>
-        {b>0&&<div style={{ marginBottom:16 }}><Bar v={total} max={b} color={total>b?T.down:c.color} h={6} /></div>}
         {list.length===0&&<Empty>Aucune dépense</Empty>}
-        <Glass pad="0 16px" r={20}>{list.map(t=><TxRow key={t.id} t={t} onDel={()=>askDel(t)} />)}</Glass>
+        <Glass pad="0 16px" r={20}>{list.map(t=><TxRow key={t.id} t={t} onDel={()=>askDel(t)} onEdit={()=>setEditTx(t)} />)}</Glass>
       </Sheet>
     );
   }
@@ -1073,6 +1142,48 @@ export default function App() {
             </TBtn>
           </div>
         )}
+      </Sheet>
+    );
+  }
+
+  function EditCatSheet(){
+    const T=useT();
+    const isNew=editCat==="new";
+    const existing=isNew?null:customCats.find(c=>c.id===editCat);
+    const [label,setLabel]=useState(existing?.label||"");
+    const [icon,setIcon]=useState(existing?.icon||"📦");
+    const [color,setColor]=useState(existing?.color||"#6E5DF0");
+    if(!editCat)return null;
+    return (
+      <Sheet title={isNew?"Nouvelle catégorie":"Modifier la catégorie"} onClose={()=>setEditCat(null)}>
+        <Field label="Nom">
+          <TInput placeholder="Ex: Cadeaux, Animaux…" value={label} onChange={e=>setLabel(e.target.value)} />
+        </Field>
+        <Field label="Icône">
+          <div style={{ display:"flex",flexWrap:"wrap",gap:8 }}>
+            {EMOJI_LIST.map(e=>(
+              <button key={e} onClick={()=>setIcon(e)} style={{ width:44,height:44,borderRadius:12,background:icon===e?color+"33":T.cardHi,border:`2px solid ${icon===e?color:T.stroke}`,fontSize:22,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center" }}>{e}</button>
+            ))}
+          </div>
+        </Field>
+        <Field label="Couleur">
+          <div style={{ display:"flex",flexWrap:"wrap",gap:8 }}>
+            {COLOR_LIST.map(col=>(
+              <button key={col} onClick={()=>setColor(col)} style={{ width:38,height:38,borderRadius:"50%",background:col,border:color===col?"3px solid #fff":"3px solid transparent",cursor:"pointer",boxShadow:color===col?`0 0 0 2px ${col}`:"none" }} />
+            ))}
+          </div>
+        </Field>
+        {/* Preview */}
+        <div style={{ display:"flex",alignItems:"center",gap:12,background:T.cardHi,borderRadius:16,padding:"14px 16px",marginBottom:16 }}>
+          <div style={{ width:44,height:44,borderRadius:13,background:color+"33",border:`1px solid ${color}44`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:22 }}>{icon}</div>
+          <span style={{ fontSize:16,fontWeight:700,color:T.ink }}>{label||"Aperçu"}</span>
+        </div>
+        <TBtn full onClick={()=>{
+          if(!label.trim())return;
+          if(isNew) addCustomCat({label:label.trim(),icon,color});
+          else updateCustomCat(editCat,{label:label.trim(),icon,color});
+          setEditCat(null);
+        }}>{isNew?"Créer la catégorie":"Enregistrer"}</TBtn>
       </Sheet>
     );
   }
@@ -1132,6 +1243,7 @@ export default function App() {
       {sheet==="review"&&!impLoad&&<ReviewSheet />}
       {sheet==="history"&&<HistorySheet />}
       {editTx&&<EditTxSheet />}
+      {editCat&&<EditCatSheet />}
       {sheet==="catDetail"&&catDetail&&<CatDetailSheet />}
       {sheet==="merchDetail"&&merchDetail&&<MerchDetailSheet />}
       {sheet==="incDetail"&&<IncDetailSheet />}
