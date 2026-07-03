@@ -989,6 +989,15 @@ export default function App(){
         {/* Données */}
         <SecLabel label="DONNÉES"/>
         <Glass r={20} pad="0" style={{overflow:"hidden",marginBottom:24}}>
+          <div onClick={()=>setConfirm({month:true,label:`toutes les transactions de ${MONTHS[month]} ${year} ?`})} style={{...rowSt(T,true),cursor:"pointer"}}>
+            <div style={{display:"flex",alignItems:"center",gap:12}}>
+              <div style={{width:36,height:36,borderRadius:10,background:T.gold+"18",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18}}>📅</div>
+              <div>
+                <div style={{fontWeight:600,fontSize:15,color:T.ink}}>Supprimer {MONTHS[month]} {year}</div>
+                <div style={{fontSize:12,color:T.inkDim}}>Efface les transactions du mois affiché</div>
+              </div>
+            </div>
+          </div>
           <div onClick={()=>setConfirm({all:true,label:"toutes tes données ? Cette action est irréversible."})} style={{...rowSt(T,false),cursor:"pointer"}}>
             <div style={{display:"flex",alignItems:"center",gap:12}}>
               <div style={{width:36,height:36,borderRadius:10,background:T.down+"18",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18}}>🗑️</div>
@@ -1305,8 +1314,16 @@ export default function App(){
 
       <Toast msg={toast} onDone={()=>setToast("")}/>
       <Confirm
-        msg={confirm?`Supprimer "${confirm.label}" ?`:null}
-        onYes={()=>{confirm?.all?(setTxs([]),setToast("🗑 Tout effacé"),setConfirm(null)):delTx(confirm.id);}}
+        msg={confirm?(confirm.all||confirm.month)?`Supprimer ${confirm.label}`:`Supprimer "${confirm.label}" ?`:null}
+        onYes={()=>{
+          if(confirm?.all){setTxs([]);setToast("🗑 Tout effacé");setConfirm(null);}
+          else if(confirm?.month){
+            setTxs(p=>p.filter(t=>{const d=new Date(t.date);return!(d.getMonth()===month&&d.getFullYear()===year);}));
+            setToast(`🗑 ${MONTHS[month]} ${year} effacé`);
+            setConfirm(null);
+          }
+          else delTx(confirm.id);
+        }}
         onNo={()=>setConfirm(null)}
       />
     </div>
