@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/static-components */
 import{useState,useEffect,useRef,useMemo,useCallback}from"react";
 
 // ═══════════════════════════════════════════════════════════════
@@ -62,7 +63,7 @@ const YUH_IN=["SALARY","BANK TRANSFER","SEPA CREDIT TRANSFER","INTEREST"];
 const cc=s=>s?.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"").trim()||"";
 function splitCSV(line){const r=[];let cur="",inQ=false;for(let i=0;i<line.length;i++){const c=line[i];if(c==='"'){if(inQ&&line[i+1]==='"'){cur+='"';i++;}else inQ=!inQ;}else if((c===";"||c===",")&&!inQ){r.push(cur);cur="";}else cur+=c;}r.push(cur);return r;}
 function toDate(s){if(!s)return null;const clean=s.trim().replace(/["']/g,"");const isoM=clean.match(/^(\d{4})-(\d{2})-(\d{2})/);if(isoM)return`${isoM[1]}-${isoM[2]}-${isoM[3]}`;const dmyDot=clean.match(/^(\d{2})\.(\d{2})\.(\d{4})/);if(dmyDot)return`${dmyDot[3]}-${dmyDot[2]}-${dmyDot[1]}`;const dmySlash=clean.match(/^(\d{2})\/(\d{2})\/(\d{4})/);if(dmySlash)return`${dmySlash[3]}-${dmySlash[2]}-${dmySlash[1]}`;return null;}
-function toAmt(s){if(!s&&s!==0)return null;const n=parseFloat(String(s).replace(/[^0-9.,\-]/g,"").replace(",","."));return isNaN(n)?null:Math.abs(n);}
+function toAmt(s){if(!s&&s!==0)return null;const n=parseFloat(String(s).replace(/[^0-9.,-]/g,"").replace(",","."));return isNaN(n)?null:Math.abs(n);}
 function isSelf(desc){const d=cc(desc);return SELF.some(k=>d.includes(k));}
 function today(){const d=new Date();return`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;}
 function chf(n){return`CHF ${(+n||0).toFixed(2)}`;}
@@ -153,7 +154,7 @@ function parseGeneric(text,allCats){
   const results=[];
   for(let i=1;i<lines.length;i++){
     const cols=lines[i].split(sep).map(c=>c.replace(/^"|"$/g,"").trim());
-    const rawAmt=parseFloat((cols[amtIdx]||"0").replace(",",".").replace(/[^0-9.\-]/g,""));
+    const rawAmt=parseFloat((cols[amtIdx]||"0").replace(",",".").replace(/[^0-9.-]/g,""));
     if(isNaN(rawAmt)||rawAmt===0)continue;
     const isIncome=rawAmt>0;
     const amt=Math.abs(rawAmt);
@@ -183,15 +184,11 @@ async function aiCategorize(items){
 // ═══════════════════════════════════════════════════════════════
 const SK={tx:"au4_tx",inc:"au4_inc",rec:"au4_rec",theme:"au4_th",cats:"au4_cats",rules:"au4_rules"};
 const load=(k,fb)=>{try{const v=localStorage.getItem(k);return v?JSON.parse(v):fb;}catch{return fb;}};
-const sv=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v));}catch{}};
+const sv=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v));}catch{/* Storage may be unavailable or full. */}};
 
 // ═══════════════════════════════════════════════════════════════
 //  UI PRIMITIVES — Apple-style
 // ═══════════════════════════════════════════════════════════════
-function Card({children,style={},pad="16px",r=14}){
-  return<div style={{borderRadius:r,padding:pad,background:"var(--card)",border:"0.5px solid var(--stroke)",...style}}>{children}</div>;
-}
-
 function Glass({children,style={},pad="16px",r=14}){
   return<div style={{borderRadius:r,padding:pad,background:"var(--card)",border:"0.5px solid var(--stroke)",overflow:"hidden",...style}}>{children}</div>;
 }
@@ -209,12 +206,6 @@ function Bar({v,max,color,h=4}){
 
 function Pill({children,color}){
   return<span style={{display:"inline-flex",alignItems:"center",background:color+"18",color,borderRadius:20,padding:"3px 9px",fontSize:12,fontWeight:600,letterSpacing:-0.1}}>{children}</span>;
-}
-
-function Toast({msg,onDone}){
-  useEffect(()=>{if(msg){const t=setTimeout(onDone,2600);return()=>clearTimeout(t);}},[msg]);
-  if(!msg)return null;
-  return<div style={{position:"fixed",bottom:100,left:"50%",transform:"translateX(-50%)",zIndex:999,background:"rgba(50,50,52,0.95)",backdropFilter:"blur(20px)",WebkitBackdropFilter:"blur(20px)",color:"#fff",padding:"11px 20px",borderRadius:14,fontSize:14,fontWeight:500,whiteSpace:"nowrap",boxShadow:"0 4px 24px rgba(0,0,0,0.25)",animation:"toastIn 0.25s cubic-bezier(0.34,1.56,0.64,1)"}}>{msg}</div>;
 }
 
 function Confirm({msg,onYes,onNo}){
@@ -321,31 +312,21 @@ function Donut({data,size=140}){
   const total=data.reduce((s,d)=>s+d.value,0);
   if(!total)return<div style={{width:size,height:size,borderRadius:"50%",background:"var(--stroke)",margin:"0 auto"}}/>;
   const cx=size/2,cy=size/2,r=size*0.38,stroke=size*0.12;
-  let angle=-Math.PI/2;
-  const arcs=data.map(d=>{
+  const arcs=data.reduce((acc,d)=>{
     const a=(d.value/total)*Math.PI*2;
-    const x1=cx+r*Math.cos(angle),y1=cy+r*Math.sin(angle);
-    angle+=a;
-    const x2=cx+r*Math.cos(angle),y2=cy+r*Math.sin(angle);
-    return{...d,d:`M${x1},${y1} A${r},${r} 0 ${a>Math.PI?1:0},1 ${x2},${y2}`,large:a>Math.PI};
-  });
+    const x1=cx+r*Math.cos(acc.angle),y1=cy+r*Math.sin(acc.angle);
+    const end=acc.angle+a;
+    const x2=cx+r*Math.cos(end),y2=cy+r*Math.sin(end);
+    acc.items.push({...d,d:`M${x1},${y1} A${r},${r} 0 ${a>Math.PI?1:0},1 ${x2},${y2}`,large:a>Math.PI});
+    acc.angle=end;
+    return acc;
+  },{angle:-Math.PI/2,items:[]}).items;
   return<svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
     {arcs.map((a,i)=><path key={i} d={a.d} fill="none" stroke={a.color} strokeWidth={stroke} strokeLinecap="round"/>)}
   </svg>;
 }
 
-function TrendLine({data,color,h=44,w=200}){
-  if(!data||data.length<2)return null;
-  const vals=data.map(d=>d.spent);
-  const mx=Math.max(...vals,1);
-  const pts=vals.map((v,i)=>`${(i/(vals.length-1))*w},${h-(v/mx)*(h*0.85)}`).join(" ");
-  return<svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} style={{overflow:"visible"}}>
-    <defs><linearGradient id="tg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={color} stopOpacity="0.25"/><stop offset="100%" stopColor={color} stopOpacity="0"/></linearGradient></defs>
-    <polyline points={pts} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-  </svg>;
-}
-
-function Heatmap({txs,month,year,T}){
+function Heatmap({txs,month,year}){
   const daysInMonth=new Date(year,month+1,0).getDate();
   const firstDay=new Date(year,month,1).getDay();
   const dayTots=useMemo(()=>{
@@ -385,14 +366,15 @@ export default function App(){
   const[themeKey,setThemeKey]=useState(()=>load(SK.theme,"dark"));
   const[sheet,setSheet]=useState(null);
   const[toast,setToast]=useState("");
+  useEffect(()=>{if(!toast)return;const timer=setTimeout(()=>setToast(""),2600);return()=>clearTimeout(timer);},[toast]);
   const[confirm,setConfirm]=useState(null);
   const[catDetail,setCatDetail]=useState(null);
   const[merchantDetail,setMerchantDetail]=useState(null);
   const[editTx,setEditTx]=useState(null);
   const[editCat,setEditCat]=useState(null);
-  const[searchQ,setSearchQ]=useState("");
   const[impItems,setImpItems]=useState([]);
-  const[impLoad,setImpLoad]=useState(false);
+  const env={top:0,bottom:0};
+  const isDark=themeKey==="dark";
 
   const T=THEMES[themeKey];
   const cssVars={
@@ -460,16 +442,7 @@ export default function App(){
   },[]);
   const delTx=useCallback(id=>{setTxs(p=>p.filter(t=>t.id!==id));setToast("Supprimé");setConfirm(null);},[]);
   const askDel=useCallback(t=>{setConfirm({msg:`Supprimer "${t.description}" ?`,onYes:()=>{delTx(t.id);},onNo:()=>setConfirm(null)});},[delTx]);
-  const updateTx=useCallback((id,patch)=>{
-    setTxs(p=>p.map(t=>t.id===id?{...t,...patch}:t));
-    if(patch.category&&patch.description){setLearned(r=>({...r,[patch.description.trim()]:patch.category}));}
-    setToast("✓ Modifié");
-  },[]);
-  const bulkRecategorize=useCallback((desc,cat)=>{
-    setTxs(p=>p.map(t=>t.description.trim()===desc.trim()&&!t.isIncome?{...t,category:cat}:t));
-    setLearned(r=>({...r,[desc.trim()]:cat}));
-    setToast("✓ Recatégorisé");
-  },[]);
+
   const addInc=useCallback(f=>{setIncomes(p=>[...p,{id:crypto.randomUUID(),label:f.label,amount:+f.amount,day:+f.day}]);setToast("✓ Revenu ajouté");},[]);
   const delInc=useCallback(id=>{setIncomes(p=>p.filter(i=>i.id!==id));},[]);
   const addRec=useCallback(f=>{setRecurring(p=>[...p,{id:crypto.randomUUID(),label:f.label,amount:+f.amount,category:f.category,day:+f.day}]);setToast("✓ Dépense fixe ajoutée");},[]);
@@ -481,18 +454,20 @@ export default function App(){
   const handleImport=useCallback(async(e)=>{
     const files=Array.from(e.target.files||[]);
     if(!files.length)return;
-    setSheet("import");setImpLoad(true);
+    setSheet("import");
     try{
       let all=[];
       for(const f of files){const txt=await f.text();all=[...all,...detectAndParse(txt,allCats)];}
       all=all.map((t,i)=>({...t,_idx:i,_on:true,category:learned[t.description?.trim()]||t.category}));
       const aiDone=await aiCategorize(all);
-      setImpItems(aiDone);setImpLoad(false);setSheet("review");
-    }catch(err){setImpLoad(false);setSheet(null);setToast("Erreur import");}
+      setImpItems(aiDone);setSheet("review");
+    }catch{setSheet(null);setToast("Erreur import");}
   },[allCats,learned]);
 
   const doImport=useCallback(items=>{
-    const toAdd=items.filter(t=>t._on).map(({_on,_idx,...t})=>t);
+    const toAdd=items.filter(t=>t._on).map(t=>{
+      const copy={...t};delete copy._on;delete copy._idx;return copy;
+    });
     setTxs(p=>[...toAdd,...p]);
     setSheet(null);setToast(`✓ ${toAdd.length} transactions importées`);
   },[]);
@@ -777,8 +752,6 @@ export default function App(){
 
   // Réglages suite (dépenses fixes, catégories, règles, données) — injectées dans Reglages via render
   function ReglagesSuite(){
-    const EMOJIS=["🛒","🍽️","🚗","🎮","💊","👕","🏠","💻","📲","📦","🎵","🏋️","✈️","🐾","🎁","☕","🏦","📚","🎨","🐟","🧴","🔧","💈","🌿","🎯","🏊","🎸","🧹","🛍️","💰"];
-    const COLORS=["#30D158","#FF9F0A","#64D2FF","#BF5AF2","#FF6369","#FF453A","#0A84FF","#5E5CE6","#FFD60A","#98989D","#FF375F","#34C759","#60A5FA","#FBBF24","#A78BFA","#FB7185"];
     return<>
       {/* Dépenses fixes */}
       <SecLabel label="DÉPENSES FIXES" action={<AddBtn color={T.down} onClick={()=>setSheet("addRec")}/>}/>
@@ -799,7 +772,7 @@ export default function App(){
       {/* Catégories */}
       <SecLabel label="MES CATÉGORIES" action={<AddBtn color={T.indigoLt} onClick={()=>setEditCat("new")}/>}/>
       <Glass r={16} pad="0" style={{overflow:"hidden",marginBottom:24}}>
-        {BASE_CATS.filter(c=>c.id!=="autre"&&c.id!=="twint").map((cat,i)=>(
+        {BASE_CATS.filter(c=>c.id!=="autre"&&c.id!=="twint").map(cat=>(
           <div key={cat.id} style={rowSt(true)}>
             <div style={{display:"flex",alignItems:"center",gap:10}}>
               <Avatar icon={cat.icon} color={cat.color} size={36}/>
@@ -808,7 +781,7 @@ export default function App(){
             <span style={{fontSize:11,color:T.inkFaint}}>Intégrée</span>
           </div>
         ))}
-        {customCats.map((cat,i)=>(
+        {customCats.map(cat=>(
           <div key={cat.id} style={rowSt(true)}>
             <div style={{display:"flex",alignItems:"center",gap:10}}>
               <Avatar icon={cat.icon} color={cat.color} size={36}/>
@@ -982,7 +955,7 @@ export default function App(){
 
   function HistorySheet(){
     const all=[...txs].sort((a,b)=>new Date(b.date)-new Date(a.date));
-    const [q,setQ]=React.useState("");
+    const [q,setQ]=useState("");
     const filtered=q.trim()?all.filter(t=>t.description.toLowerCase().includes(q.toLowerCase())):all;
     return<Sheet title="Historique" onClose={()=>setSheet(null)}>
       <div style={{position:"relative",marginBottom:12}}>
@@ -999,11 +972,11 @@ export default function App(){
 
   function EditTxSheet(){
     const t=editTx;
-    const [desc,setDesc]=React.useState(t.description);
-    const [amt,setAmt]=React.useState(String(Math.abs(t.amount)));
-    const [cat,setCat]=React.useState(t.category||"autre");
-    const [dt,setDt]=React.useState(t.date);
-    const [pickCat,setPickCat]=React.useState(false);
+    const [desc,setDesc]=useState(t.description);
+    const [amt,setAmt]=useState(String(Math.abs(t.amount)));
+    const [cat,setCat]=useState(t.category||"autre");
+    const [dt,setDt]=useState(t.date);
+    const [pickCat,setPickCat]=useState(false);
     function save(){
       const a=parseFloat(amt.replace(",","."));
       if(!desc.trim()||isNaN(a)||a<=0){setToast("Champs invalides");return;}
@@ -1014,38 +987,39 @@ export default function App(){
     return<Sheet title="Modifier" onClose={()=>setEditTx(null)}>
       {pickCat?<CatPicker cats={allCats} value={cat} onChange={v=>{setCat(v);setPickCat(false);}}/>:<>
         <Glass pad="0 16px" r={16} style={{marginBottom:12}}>
-          <Field label="Description"><TInput value={desc} onChange={setDesc}/></Field>
-          <Field label="Montant (CHF)" border><TInput value={amt} onChange={setAmt} type="decimal"/></Field>
-          <Field label="Date" border><TInput value={dt} onChange={setDt} type="date"/></Field>
-          {!t.isIncome&&<Field label="Catégorie" border>
+          <Field label="Description"><TInput value={desc} onChange={e=>setDesc(e.target.value)}/></Field>
+          <Field label="Montant (CHF)"><TInput value={amt} onChange={e=>setAmt(e.target.value)} type="number"/></Field>
+          <Field label="Date"><TInput value={dt} onChange={e=>setDt(e.target.value)} type="date"/></Field>
+          {!t.isIncome&&<Field label="Catégorie">
             <div onPointerDown={()=>setPickCat(true)} style={{display:"flex",alignItems:"center",justifyContent:"space-between",paddingTop:4,paddingBottom:4}}>
               <span style={{color:getCat(cat).color,fontWeight:500}}>{getCat(cat).label}</span>
               <span style={{color:T.inkDim,fontSize:12}}>▶</span>
             </div>
           </Field>}
         </Glass>
-        <TBtn label="Enregistrer" color={T.indigo} onPress={save}/>
-        <TBtn label="Annuler" color={T.inkDim} onPress={()=>setEditTx(null)} style={{marginTop:8}}/>
+        <TBtn full onClick={save}>Enregistrer</TBtn>
+        <TBtn full variant="secondary" onClick={()=>setEditTx(null)} style={{marginTop:8}}>Annuler</TBtn>
       </>}
     </Sheet>;
   }
 
   function EditCatSheet(){
-    const c=editCat;
+    const c=editCat==="new"?null:customCats.find(cat=>cat.id===editCat);
     const COLORS=["#FF453A","#FF9F0A","#FFD60A","#32D74B","#0A84FF","#5E5CE6","#BF5AF2","#FF375F","#00C7BE","#AC8E68"];
-    const [label,setLabel]=React.useState(c.label);
-    const [color,setColor]=React.useState(c.color);
-    const [budget,setBudget]=React.useState(c.budget?String(c.budget):"");
+    const [label,setLabel]=useState(c?.label||"");
+    const [color,setColor]=useState(c?.color||COLORS[0]);
+    const [budget,setBudget]=useState(c?.budget?String(c.budget):"");
     function save(){
       if(!label.trim()){setToast("Nom requis");return;}
       const b=budget?parseFloat(budget.replace(",",".")):null;
-      setAllCats(prev=>prev.map(x=>x.id===c.id?{...x,label:label.trim(),color,budget:b||null}:x));
-      setToast("Catégorie mise à jour");setEditCat(null);
+      if(c)updateCustomCat(c.id,{label:label.trim(),color,budget:b||null});
+      else addCustomCat({label:label.trim(),icon:"📦",color,budget:b||null});
+      setEditCat(null);
     }
-    return<Sheet title="Modifier catégorie" onClose={()=>setEditCat(null)}>
+    return<Sheet title={c?"Modifier catégorie":"Nouvelle catégorie"} onClose={()=>setEditCat(null)}>
       <Glass pad="0 16px" r={16} style={{marginBottom:12}}>
-        <Field label="Nom"><TInput value={label} onChange={setLabel}/></Field>
-        <Field label="Budget mensuel (opt.)" border><TInput value={budget} onChange={setBudget} type="decimal"/></Field>
+        <Field label="Nom"><TInput value={label} onChange={e=>setLabel(e.target.value)}/></Field>
+        <Field label="Budget mensuel (opt.)"><TInput value={budget} onChange={e=>setBudget(e.target.value)} type="number"/></Field>
       </Glass>
       <Glass pad="14px 16px" r={16} style={{marginBottom:12}}>
         <div style={{fontSize:11,color:T.inkDim,fontWeight:600,marginBottom:10}}>COULEUR</div>
@@ -1053,23 +1027,24 @@ export default function App(){
           {COLORS.map(col=><div key={col} onPointerDown={()=>setColor(col)} style={{width:30,height:30,borderRadius:15,background:col,border:color===col?`2px solid ${T.ink}`:"2px solid transparent",cursor:"pointer"}}/>)}
         </div>
       </Glass>
-      <TBtn label="Enregistrer" color={T.indigo} onPress={save}/>
-      <TBtn label="Annuler" color={T.inkDim} onPress={()=>setEditCat(null)} style={{marginTop:8}}/>
+      <TBtn full onClick={save}>Enregistrer</TBtn>
+      <TBtn full variant="secondary" onClick={()=>setEditCat(null)} style={{marginTop:8}}>Annuler</TBtn>
     </Sheet>;
   }
 
   // ── RÉGLAGES: règles et données ─────────────────────────────
   function ReglagesRules(){
+    const rules=Object.entries(learned);
     return<div>
-      <SecLabel>RÈGLES APPRISES</SecLabel>
+      <SecLabel label="RÈGLES APPRISES"/>
       {rules.length===0&&<EmptyNote>Aucune règle configurée</EmptyNote>}
       {rules.length>0&&<Glass pad="0 16px" r={16} style={{marginBottom:16}}>
-        {rules.map((r,i)=><div key={r.id} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 0",borderBottom:i<rules.length-1?`0.5px solid ${T.stroke}`:"none"}}>
+        {rules.map(([pattern,category],i)=><div key={pattern} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 0",borderBottom:i<rules.length-1?`0.5px solid ${T.stroke}`:"none"}}>
           <div style={{flex:1,minWidth:0}}>
-            <div style={{fontWeight:500,fontSize:14,color:T.ink,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{r.pattern}</div>
-            <div style={{fontSize:12,color:getCat(r.category).color,marginTop:2}}>{getCat(r.category).label}</div>
+            <div style={{fontWeight:500,fontSize:14,color:T.ink,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{pattern}</div>
+            <div style={{fontSize:12,color:getCat(category).color,marginTop:2}}>{getCat(category).label}</div>
           </div>
-          <DelBtn onPress={()=>setRules(prev=>prev.filter(x=>x.id!==r.id))}/>
+          <DelBtn onClick={()=>setLearned(prev=>{const next={...prev};delete next[pattern];return next;})}/>
         </div>)}
       </Glass>}
     </div>;
@@ -1091,7 +1066,7 @@ export default function App(){
         <div style={{padding:"14px 0"}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
             <div><div style={{fontWeight:500,fontSize:15,color:T.ink}}>Supprimer transactions</div><div style={{fontSize:12,color:T.inkDim}}>Garder config et catégories</div></div>
-            <button onPointerDown={()=>setConfirm({msg:"Supprimer toutes les transactions importées ?",ok:"Supprimer",danger:true,cb:()=>{setTxs([]);setToast("Transactions supprimées");}})}
+            <button onPointerDown={()=>setConfirm({msg:"Supprimer toutes les transactions importées ?",onYes:()=>{setTxs([]);setConfirm(null);setToast("Transactions supprimées");},onNo:()=>setConfirm(null)})}
               style={{background:"transparent",color:T.down,border:`0.5px solid ${T.down}`,borderRadius:8,padding:"6px 14px",fontSize:13,fontWeight:600,cursor:"pointer"}}>
               Effacer
             </button>
@@ -1166,9 +1141,9 @@ export default function App(){
       {editCat&&<EditCatSheet/>}
 
       {/* Toast */}
-      {toastMsg&&(
-        <div style={{position:"fixed",bottom:TAB_H+env.bottom+16,left:"50%",transform:"translateX(-50%)",background:toastMsg.type==="error"?T.down:T.indigo,color:"#fff",padding:"10px 20px",borderRadius:20,fontSize:14,fontWeight:500,whiteSpace:"nowrap",zIndex:9999,animation:"toastIn 0.3s ease",boxShadow:"0 4px 20px rgba(0,0,0,0.3)"}}>
-          {toastMsg.text}
+      {toast&&(
+        <div style={{position:"fixed",bottom:TAB_H+env.bottom+16,left:"50%",transform:"translateX(-50%)",background:T.indigo,color:"#fff",padding:"10px 20px",borderRadius:20,fontSize:14,fontWeight:500,whiteSpace:"nowrap",zIndex:9999,animation:"toastIn 0.3s ease",boxShadow:"0 4px 20px rgba(0,0,0,0.3)"}}>
+          {toast}
         </div>
       )}
 
