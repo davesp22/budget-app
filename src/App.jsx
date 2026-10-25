@@ -459,7 +459,7 @@ export default function App(){
     setTxs(p=>[tx,...p]);setToast("✓ Ajouté");
   },[]);
   const delTx=useCallback(id=>{setTxs(p=>p.filter(t=>t.id!==id));setToast("Supprimé");setConfirm(null);},[]);
-  const askDel=useCallback(t=>{setConfirm({id:t.id,label:t.description});},[]);
+  const askDel=useCallback(t=>{setConfirm({msg:`Supprimer "${t.description}" ?`,onYes:()=>{delTx(t.id);},onNo:()=>setConfirm(null)});},[delTx]);
   const updateTx=useCallback((id,patch)=>{
     setTxs(p=>p.map(t=>t.id===id?{...t,...patch}:t));
     if(patch.category&&patch.description){setLearned(r=>({...r,[patch.description.trim()]:patch.category}));}
@@ -1006,10 +1006,10 @@ export default function App(){
     const [pickCat,setPickCat]=React.useState(false);
     function save(){
       const a=parseFloat(amt.replace(",","."));
-      if(!desc.trim()||isNaN(a)||a<=0){toast("Champs invalides","error");return;}
+      if(!desc.trim()||isNaN(a)||a<=0){setToast("Champs invalides");return;}
       const updated={...t,description:desc.trim(),amount:t.isIncome?a:-a,category:cat,date:dt};
       setTxs(prev=>prev.map(x=>x.id===t.id?updated:x));
-      toast("Transaction modifiée");setEditTx(null);
+      setToast("Transaction modifiée");setEditTx(null);
     }
     return<Sheet title="Modifier" onClose={()=>setEditTx(null)}>
       {pickCat?<CatPicker cats={allCats} value={cat} onChange={v=>{setCat(v);setPickCat(false);}}/>:<>
@@ -1037,10 +1037,10 @@ export default function App(){
     const [color,setColor]=React.useState(c.color);
     const [budget,setBudget]=React.useState(c.budget?String(c.budget):"");
     function save(){
-      if(!label.trim()){toast("Nom requis","error");return;}
+      if(!label.trim()){setToast("Nom requis");return;}
       const b=budget?parseFloat(budget.replace(",",".")):null;
       setAllCats(prev=>prev.map(x=>x.id===c.id?{...x,label:label.trim(),color,budget:b||null}:x));
-      toast("Catégorie mise à jour");setEditCat(null);
+      setToast("Catégorie mise à jour");setEditCat(null);
     }
     return<Sheet title="Modifier catégorie" onClose={()=>setEditCat(null)}>
       <Glass pad="0 16px" r={16} style={{marginBottom:12}}>
@@ -1082,7 +1082,7 @@ export default function App(){
         <div style={{padding:"14px 0",borderBottom:`0.5px solid ${T.stroke}`}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
             <div><div style={{fontWeight:500,fontSize:15,color:T.ink}}>Réinitialiser</div><div style={{fontSize:12,color:T.inkDim}}>Supprimer toutes les données</div></div>
-            <button onPointerDown={()=>setConfirm({msg:"Supprimer TOUTES les données ? Cette action est irréversible.",ok:"Supprimer",danger:true,cb:()=>{Object.values(SK).forEach(k=>localStorage.removeItem(k));window.location.reload();}})}
+            <button onPointerDown={()=>setConfirm({msg:"Supprimer TOUTES les données ? Cette action est irréversible.",onYes:()=>{Object.values(SK).forEach(k=>localStorage.removeItem(k));window.location.reload();},onNo:()=>setConfirm(null)})}
               style={{background:T.down,color:"#fff",border:"none",borderRadius:8,padding:"6px 14px",fontSize:13,fontWeight:600,cursor:"pointer"}}>
               Effacer
             </button>
@@ -1091,7 +1091,7 @@ export default function App(){
         <div style={{padding:"14px 0"}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
             <div><div style={{fontWeight:500,fontSize:15,color:T.ink}}>Supprimer transactions</div><div style={{fontSize:12,color:T.inkDim}}>Garder config et catégories</div></div>
-            <button onPointerDown={()=>setConfirm({msg:"Supprimer toutes les transactions importées ?",ok:"Supprimer",danger:true,cb:()=>{setTxs([]);toast("Transactions supprimées");}})}
+            <button onPointerDown={()=>setConfirm({msg:"Supprimer toutes les transactions importées ?",ok:"Supprimer",danger:true,cb:()=>{setTxs([]);setToast("Transactions supprimées");}})}
               style={{background:"transparent",color:T.down,border:`0.5px solid ${T.down}`,borderRadius:8,padding:"6px 14px",fontSize:13,fontWeight:600,cursor:"pointer"}}>
               Effacer
             </button>
@@ -1172,21 +1172,7 @@ export default function App(){
         </div>
       )}
 
-      {/* Confirm */}
-      {confirm&&(
-        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"flex-end",zIndex:9998,animation:"fadeIn 0.2s ease"}} onPointerDown={e=>{if(e.target===e.currentTarget)setConfirm(null);}}>
-          <div style={{width:"100%",background:T.card,borderRadius:"20px 20px 0 0",padding:`20px 16px ${env.bottom+16}px`,animation:"slideUp 0.3s ease"}}>
-            <div style={{width:36,height:5,borderRadius:3,background:T.stroke,margin:"0 auto 20px"}}/>
-            <p style={{margin:"0 0 20px",textAlign:"center",fontSize:15,color:T.ink}}>{confirm.msg}</p>
-            <button onPointerDown={()=>{confirm.cb();setConfirm(null);}} style={{width:"100%",padding:"14px",background:confirm.danger?T.down:T.indigo,color:"#fff",border:"none",borderRadius:14,fontSize:16,fontWeight:600,cursor:"pointer",marginBottom:8}}>
-              {confirm.ok}
-            </button>
-            <button onPointerDown={()=>setConfirm(null)} style={{width:"100%",padding:"14px",background:T.glass,color:T.inkSub,border:`0.5px solid ${T.stroke}`,borderRadius:14,fontSize:16,fontWeight:500,cursor:"pointer"}}>
-              Annuler
-            </button>
-          </div>
-        </div>
-      )}
+      {confirm&&<Confirm msg={confirm.msg} onYes={confirm.onYes} onNo={confirm.onNo}/>}
     </div>
   );
 }
