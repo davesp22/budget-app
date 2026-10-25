@@ -490,6 +490,7 @@ export default function App(){
   const [impItems,setImpItems]=useState([]);
   const [impLoad,setImpLoad]=useState(false);
   const fileRef=useRef(), swipeX=useRef(null);
+  const backupRef=useRef();
 
   // ── Persist ────────────────────────────────────────────────────
   useEffect(()=>sv(SK.tx,txs),[txs]);
@@ -876,6 +877,53 @@ export default function App(){
   // ═══════════════════════════════════════════════════════════════
   //  TAB: RÉGLAGES
   // ═══════════════════════════════════════════════════════════════
+
+  const exportBackup=useCallback(()=>{
+    const backup={
+      app:"Aurora",
+      version:1,
+      createdAt:new Date().toISOString(),
+      data:Object.fromEntries(Object.values(SK).map(k=>[k,load(k,null)])),
+    };
+    const blob=new Blob([JSON.stringify(backup,null,2)],{type:"application/json"});
+    const url=URL.createObjectURL(blob);
+    const link=document.createElement("a");
+    link.href=url;
+    link.download=`aurora-backup-${today()}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+    setToast("Sauvegarde exportee ✓");
+  },[]);
+
+  const restoreBackup=useCallback(async(e)=>{
+    const file=e.target.files?.[0];
+    if(!file)return;
+    try{
+      const backup=JSON.parse(await file.text());
+      const data=backup?.data;
+      const valid=data&&Array.isArray(data[SK.tx])&&Array.isArray(data[SK.inc])&&Array.isArray(data[SK.rec]);
+      if(!valid||backup.app!=="Aurora")throw new Error("Invalid");
+      setConfirm({
+        msg:"Remplacer les donnees actuelles par cette sauvegarde ?",
+        onYes:()=>{
+          setTxs(data[SK.tx]);
+          setIncomes(data[SK.inc]);
+          setRecurring(data[SK.rec]);
+          if(data[SK.cats]&&Array.isArray(data[SK.cats]))setCustomCats(data[SK.cats]);
+          if(data[SK.rules]&&typeof data[SK.rules]==="object")setLearned(data[SK.rules]);
+          if(data[SK.theme]&&["dark","light"].includes(data[SK.theme]))setThemeKey(data[SK.theme]);
+          setConfirm(null);
+          setToast("Sauvegarde restauree ✓");
+        },
+        onNo:()=>setConfirm(null),
+      });
+    }catch{
+      setToast("Fichier invalide");
+    }finally{
+      e.target.value="";
+    }
+  },[]);
+
   function Reglages(){
     const EMOJIS=["🛒","🍽️","🚗","🎮","💊","👕","🏠","💻","📲","📦","🎵","🏋️","✈️","🐾","🎁","☕","🏦","📚","🎨","🐟","🧴","🔧","💈","🌿","🎯","🏊","🎸","🧹","🛍️","💰"];
     const COLORS=["#2ECC8F","#F0C050","#4FD8E8","#B66BFF","#FF9F5C","#FF6BAE","#5CC8FF","#7162F5","#FF8A3D","#94A3B8","#F87171","#34D399","#60A5FA","#FBBF24","#A78BFA","#FB7185"];
@@ -1007,6 +1055,26 @@ export default function App(){
             </div>
           </div>
         </Glass>
+
+        <SecLabel label="SAUVEGARDE"/>
+        <Glass r={20} pad="0" style={{overflow:"hidden",marginBottom:24}}>
+          <div onClick={exportBackup} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 16px",cursor:"pointer",borderBottom:`0.5px solid ${T.stroke}`}}>
+            <div style={{display:"flex",alignItems:"center",gap:12}}>
+              <div style={{width:36,height:36,borderRadius:10,background:T.indigo+"22",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18}}>💾</div>
+              <div><div style={{fontWeight:600,fontSize:15,color:T.ink}}>Exporter sauvegarde</div><div style={{fontSize:12,color:T.inkDim}}>Télécharge un fichier .json</div></div>
+            </div>
+            <span style={{color:T.inkDim,fontSize:18}}>›</span>
+          </div>
+          <div onClick={()=>backupRef.current?.click()} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 16px",cursor:"pointer"}}>
+            <div style={{display:"flex",alignItems:"center",gap:12}}>
+              <div style={{width:36,height:36,borderRadius:10,background:T.up+"22",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18}}>📂</div>
+              <div><div style={{fontWeight:600,fontSize:15,color:T.ink}}>Importer sauvegarde</div><div style={{fontSize:12,color:T.inkDim}}>Restaure depuis un fichier .json</div></div>
+            </div>
+            <span style={{color:T.inkDim,fontSize:18}}>›</span>
+          </div>
+          <input ref={backupRef} type="file" accept="application/json,.json" style={{display:"none"}} onChange={restoreBackup}/>
+        </Glass>
+
         <div style={{textAlign:"center",color:T.inkFaint,fontSize:12,marginTop:8}}>Aurora · Budget personnel</div>
       </div>
     );
