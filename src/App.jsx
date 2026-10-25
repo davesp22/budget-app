@@ -95,9 +95,9 @@ const BASE_CATS = [
 // Self-transfers to ignore
 const SELF = ["esposito davide","davide esposito","esposito, davide","esposito,davide","neon switzerland"];
 // TWINT persons
-const TWINT_P = ["marshall","dylan","thierry","arbian","maman","papa","jager","mettraux","yerly","jorand","beaud","tiphaine","samuel","consiglia","vincent","kylian","baptiste","lara","tatiana","francisco","gael","iman","perritaz","bro","burri","clement","damien","raphael","romain","pierre","marc","thomas","nicolas","simon","julien","antoine","maxime","steven","kevin","sarah","marie","lea","emma","sofia","lisa","anouk","manon"];
+const TWINT_P = ["marshall","dylan","thierry","arbian","maman","papa","jager","mettraux","yerly","jorand","beaud","tiphaine","samuel","consiglia","vincent","kylian","baptiste","choue","lara","tatiana","francisco","gael","iman","perritaz","bro","burri","clement","damien","raphael","romain","pierre","marc","thomas","nicolas","simon","julien","antoine","maxime","steven","kevin","sarah","marie","lea","emma","sofia","lisa","anouk","manon"];
 // TWINT → specific category
-const TWINT_MAP = { "oberson":"loisirs","digitecgalaxus":"tech","bestsecretgmbh":"vetements","choue":"logement" };
+const TWINT_MAP = { "oberson":"loisirs","digitecgalaxus":"tech","bestsecretgmbh":"vetements" };
 // Yuh activity types
 const YUH_SKIP = ["REWARD_RECEIVED","GOAL_WITHDRAWAL","GOAL_DEPOSIT","CASH_TRANSACTION_RELATED_OTHER"];
 const YUH_IN   = ["PAYMENT_TRANSACTION_IN","CARD_TRANSACTION_IN","TRANSFER_IN"];
@@ -128,7 +128,7 @@ function smartCat(desc, actType, learned={}){
   const isOut = actType && actType.includes("OUT");
   if(isOut || actType==="TWINT_OUT"){
     if(d.includes("oberson")) return "loisirs";
-    if(d.includes("choue")) return "logement";
+    if(d.includes("choue")) return "twint";
     for(const [k,v] of Object.entries(TWINT_MAP)) if(d.includes(k)) return v;
     if(TWINT_P.some(p=>d.includes(p))) return "twint";
     if(d.includes("twint")) return "twint";
@@ -190,7 +190,9 @@ function parseYuh(lines, learned){
       else if(TWINT_MAP[dl]) category=TWINT_MAP[dl];
       else category="twint";
     } else {
-      category=smartCat(desc+" "+rawName, act, learned);
+      const dl2=desc.toLowerCase();
+      if(dl2.includes("choue")&&amt===705) category="logement";
+      else category=smartCat(desc+" "+rawName, act, learned);
     }
     out.push({date,description:desc,amount:amt,isIncome:isInc||isTwintIn,category,source:"yuh"});
   }
