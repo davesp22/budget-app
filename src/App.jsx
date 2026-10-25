@@ -1102,13 +1102,6 @@ export default function App(){
   }
 
   // ── MAIN RETURN ──────────────────────────────────────────────
-  const cssVars={
-    "--bg":T.bg,"--card":T.card,"--cardHi":T.cardHi,"--glass":T.glass,
-    "--stroke":T.stroke,"--strokeSoft":T.strokeSoft,"--indigo":T.indigo,
-    "--violet":T.violet,"--up":T.up,"--down":T.down,"--ink":T.ink,
-    "--inkSub":T.inkSub,"--inkDim":T.inkDim,"--inkFaint":T.inkFaint,
-    "--indigoLt":T.indigoLt,"--gold":T.gold,
-  };
 
   const TAB_H=72;
   const tabs=[
