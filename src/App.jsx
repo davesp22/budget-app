@@ -57,7 +57,7 @@ const BASE_CATS=[
 const SELF=["virement","transfer","transfert","epargne","épargne","saving","from savings","to savings","self","moi-même","myself","proprio","propre compte","eigentransfer","interbank","interne","compte à compte","remboursement propre","retrait atm","retrait bancomat","bancomat","retrait"];
 const TWINT_P=["loris","luca","noe","noé","valentin","mathieu","mathis","thomas","julian","marco","kevin","david","alex","alexis","simon","nicolas","romain","pierre","antoine","benoit","benoît","michael","michaël","fabian","daniel","joel","joël","samuel","raphael","raphaël","gabriel","xavier","jonathan","clement","clément","tristan","maxime","florian","guillaume","baptiste","quentin","adrien","jordan","theo","théo","hugo","tom","lucas","arthur","ethan","noah","enzo","axel","leo","léo","noa","ilias","selim","younes","yanis","mehdi","karim","sofiane","amine","emre","furkan","jannis","lukas","jonas","tim","jan","felix","moritz","till","florin","yann","thibault","damien","vincent","christophe","emile","émile","dominic","fabrice","renaud","sebastien","sébastien","aurelien","aurélien","elisa","laura","emma","sarah","julie","marie","céline","celine","pauline","camille","lucie","alice","léa","lea","jade","chloé","chloe","amélie","amelie","anna","lisa","clara","manon","inès","ines","eva","sofia","maya","anaïs","anais"];
 const TWINT_MAP={"migros":"alimentation","coop":"alimentation","denner":"alimentation","aldi":"alimentation","lidl":"alimentation","spar":"alimentation","avec":"alimentation","mcdonald":"restaurant","burger king":"restaurant","pizza":"restaurant","starbucks":"restaurant","kfc":"restaurant","subway":"restaurant","cff":"transport","sbb":"transport","tpf":"transport","uber":"transport","shell":"transport","bp":"transport","avia":"transport","netflix":"loisirs","spotify":"loisirs","steam":"loisirs","nintendo":"loisirs","apple":"tech","samsung":"tech","digitec":"tech","galaxus":"tech","swisscom":"tech","sunrise":"tech","salt":"tech","loyer":"logement","rent":"logement","ikea":"logement","pharmacie":"sante","apotheke":"sante","medecin":"sante"};
-const YUH_SKIP=["CARD PAYMENT","ACCOUNT TRANSFER","STANDING ORDER","DIRECT DEBIT RETURN","BANK TRANSFER RETURN"];
+const YUH_SKIP=["ACCOUNT TRANSFER","STANDING ORDER","DIRECT DEBIT RETURN","BANK TRANSFER RETURN"];
 const YUH_IN=["SALARY","BANK TRANSFER","SEPA CREDIT TRANSFER","INTEREST"];
 
 const cc=s=>s?.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"").trim()||"";
@@ -373,6 +373,7 @@ export default function App(){
   const[editTx,setEditTx]=useState(null);
   const[editCat,setEditCat]=useState(null);
   const[impItems,setImpItems]=useState([]);
+  const backupRef=useRef();
   const env={top:0,bottom:0};
   const isDark=themeKey==="dark";
 
@@ -470,6 +471,52 @@ export default function App(){
     });
     setTxs(p=>[...toAdd,...p]);
     setSheet(null);setToast(`✓ ${toAdd.length} transactions importées`);
+  },[]);
+
+  const exportBackup=useCallback(()=>{
+    const backup={
+      app:"Aurora",
+      version:1,
+      createdAt:new Date().toISOString(),
+      data:Object.fromEntries(Object.values(SK).map(k=>[k,load(k,null)])),
+    };
+    const blob=new Blob([JSON.stringify(backup,null,2)],{type:"application/json"});
+    const url=URL.createObjectURL(blob);
+    const link=document.createElement("a");
+    link.href=url;
+    link.download=`aurora-backup-${today()}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+    setToast("Sauvegarde exportée");
+  },[]);
+
+  const restoreBackup=useCallback(async(e)=>{
+    const file=e.target.files?.[0];
+    if(!file)return;
+    try{
+      const backup=JSON.parse(await file.text());
+      const data=backup?.data;
+      const valid=data&&Array.isArray(data[SK.tx])&&Array.isArray(data[SK.inc])&&Array.isArray(data[SK.rec])&&Array.isArray(data[SK.cats])&&typeof data[SK.rules]==="object"&&data[SK.rules]!==null&&["dark","light"].includes(data[SK.theme]);
+      if(!valid||backup.app!=="Aurora")throw new Error("Invalid Aurora backup");
+      setConfirm({
+        msg:"Remplacer les données actuelles par cette sauvegarde ?",
+        onYes:()=>{
+          setTxs(data[SK.tx]);
+          setIncomes(data[SK.inc]);
+          setRecurring(data[SK.rec]);
+          setCustomCats(data[SK.cats]);
+          setLearned(data[SK.rules]);
+          setThemeKey(data[SK.theme]);
+          setConfirm(null);
+          setToast("Sauvegarde restaurée");
+        },
+        onNo:()=>setConfirm(null),
+      });
+    }catch{
+      setToast("Sauvegarde invalide");
+    }finally{
+      e.target.value="";
+    }
   },[]);
 
   const fileRef=useRef();
@@ -734,6 +781,20 @@ export default function App(){
           </div>
         </div>
       </Glass>
+
+      {/* Sauvegarde */}
+      <SecLabel label="SAUVEGARDE"/>
+      <Glass r={16} pad="0" style={{overflow:"hidden",marginBottom:24}}>
+        <div onClick={exportBackup} style={{...rowSt(true),cursor:"pointer"}}>
+          <div><div style={{fontWeight:500,fontSize:15,color:T.ink}}>Exporter Aurora</div><div style={{fontSize:12,color:T.inkDim}}>Toutes les données et règles</div></div>
+          <span style={{color:T.indigo,fontSize:18}}>↓</span>
+        </div>
+        <div onClick={()=>backupRef.current?.click()} style={{...rowSt(false),cursor:"pointer"}}>
+          <div><div style={{fontWeight:500,fontSize:15,color:T.ink}}>Importer une sauvegarde</div><div style={{fontSize:12,color:T.inkDim}}>Remplacer les données actuelles</div></div>
+          <span style={{color:T.indigo,fontSize:18}}>↑</span>
+        </div>
+      </Glass>
+      <input ref={backupRef} type="file" accept="application/json,.json" style={{display:"none"}} onChange={restoreBackup}/>
 
       {/* Revenus récurrents */}
       <SecLabel label="REVENUS RÉCURRENTS" action={<AddBtn color={T.up} onClick={()=>setSheet("addInc")}/>}/>
